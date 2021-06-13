@@ -97,9 +97,11 @@ eERRORRESULT Init_SC16IS7XX(SC16IS7XX *pComp, const SC16IS7XX_Config *pConf)
 
   //--- Reset device ----------------------------------------
   Error = SC16IS7XX_SoftResetDevice(pComp);
+  if (Error != ERR_OK) return Error;                                                                      // If there is an error while calling SC16IS7XX_SoftResetDevice() then return the Error
 
   //--- Test SPI connection ---------------------------------
   Error = SC16IS7XX_HardwareCommTest(pComp);
+  if (Error != ERR_OK) return Error;                                                                      // If there is an error while calling SC16IS7XX_HardwareCommTest() then return the Error
 
   //--- Configure GPIOs -------------------------------------
   if (SC16IS7XX_LIMITS[pComp->DevicePN].HAVE_GPIO && (pConf != NULL))                                     // Only if device PN have GPIOs and a configuration is available

@@ -36,7 +36,29 @@
 #ifndef CONF_BOARD_H
 #define CONF_BOARD_H
 
+
+
+// If in debug mode, check NULL parameters that are mandatory in each functions of the driver
+#ifdef DEBUG
+//#  define CHECK_NULL_PARAM  // Set in the symbols of the C compiler of the project
+#endif
+
+
+
+//=============================================================================
+// Board configuration
+//=============================================================================
 /* Enable ICache and DCache */
 #define CONF_BOARD_ENABLE_CACHE_AT_INIT
+
+/** Enable Com Port. */
+#define CONF_BOARD_UART_CONSOLE
+
+/** Configure TWIHS on board */
+#if !defined(SOFT_I2C)
+#  define CONF_BOARD_TWIHS0
+#endif
+
+
 
 #endif /* CONF_BOARD_H */
