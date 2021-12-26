@@ -1,7 +1,7 @@
 :warning: WORK IN PROGRESS, NOTHING HAVE BEEN TESTED YET!
 
 # SC16IS7XX
-MCP251XFD is a fully hardware independant **Driver** primarily aimed at embedded world
+SC16IS7XX is a fully hardware independant **Driver** primarily aimed at embedded world
 
 # Presentation
 This driver only takes care of configuration and check of the internal registers and the formatting of the communication with the device. That means it does not directly take care of the physical communication, there is functions interfaces to do that.

@@ -12,8 +12,9 @@
  *                  SC16IS741_1         Rev.01 (29 April 2010)
  *                  SC16IS741A          Rev.1  (18 March 2013)
  *                  SC16IS752_SC16IS762 Rev.9  (22 March 2012)
- * Follow AN10571 - Sleep programming for NXP bridge ICs   Rev.01 (7 Jan  2007)
- *        AN10417 - SC16IS760/762 Fast IrDA mode           Rev.01 (8 June 2006)
+ * Follow AN10571 - Sleep programming for NXP bridge ICs    Rev.01 (7 Jan    2007)
+ *        AN10417 - SC16IS760/762 Fast IrDA mode            Rev.01 (8 June   2006)
+ *        AN10386 - Baud rate calculation for Philips UARTs Rev.01 (3 August 2005)
  ******************************************************************************/
 /* @page License
  *
@@ -37,6 +38,11 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
+
+/* Revision history:
+ * 1.0.1    I2C interface rework for I2C DMA use and polling
+ * 1.0.0    Release version
+ *****************************************************************************/
 #ifndef SC16IS7XX_H_INC
 #define SC16IS7XX_H_INC
 //=============================================================================
@@ -47,53 +53,39 @@
 #include <stddef.h>
 #include <stdlib.h>
 //-----------------------------------------------------------------------------
-#include "../../ErrorsDef.h"
-//! @cond
-#if defined(__cplusplus)
-extern "C" {
+
+#if (defined(SC16IS7XX_ONLY_I2C) || !defined(SC16IS7XX_ONLY_SPI)) && !defined(SC16IS7XX_I2C_DEFINED)
+#  define SC16IS7XX_I2C_DEFINED
 #endif
-//! @endcond
+
+#if (defined(SC16IS7XX_ONLY_SPI) || !defined(SC16IS7XX_ONLY_I2C)) && !defined(SC16IS7XX_SPI_DEFINED)
+#  define SC16IS7XX_SPI_DEFINED
+#endif
+
 //-----------------------------------------------------------------------------
-
-#ifndef __PACKED__
-# ifndef __cplusplus
-#   define __PACKED__  __attribute__((packed))
-# else
-#   define __PACKED__
-# endif
+#include "ErrorsDef.h"
+#include "GPIO_Interface.h"
+#ifdef SC16IS7XX_I2C_DEFINED
+#  include "I2C_Interface.h"
 #endif
-
-#ifndef PACKITEM
-# ifndef __cplusplus
-#   define PACKITEM
-# else
-#   define PACKITEM  __pragma(pack(push, 1))
-# endif
+#ifdef SC16IS7XX_SPI_DEFINED
+#  include "SPI_Interface.h"
 #endif
-
-#ifndef UNPACKITEM
-# ifndef __cplusplus
-#   define UNPACKITEM
-# else
-#   define UNPACKITEM  __pragma(pack(pop))
-# endif
+//-----------------------------------------------------------------------------
+#ifdef __cplusplus
+  extern "C" {
+#  define __SC16IS7XX_PACKED__
+#  define SC16IS7XX_PACKITEM    __pragma(pack(push, 1))
+#  define SC16IS7XX_UNPACKITEM  __pragma(pack(pop))
+#else
+#  define __SC16IS7XX_PACKED__  __attribute__((packed))
+#  define SC16IS7XX_PACKITEM
+#  define SC16IS7XX_UNPACKITEM
 #endif
 //-----------------------------------------------------------------------------
 
 //! This macro is used to check the size of an object. If not, it will raise a "divide by 0" error at compile time
-#ifndef ControlItemSize
-#  define ControlItemSize(item, size)  enum { item##_size_must_be_##size##_bytes = 1 / (int)(!!(sizeof(item) == size)) }
-#endif
-
-//-----------------------------------------------------------------------------
-
-#if defined(SC16IS7XX_ONLY_I2C) || !defined(SC16IS7XX_ONLY_SPI)
-#  define SC16IS7XX_I2C_DEFINED
-#endif
-
-#if defined(SC16IS7XX_ONLY_SPI) || !defined(SC16IS7XX_ONLY_I2C)
-#  define SC16IS7XX_SPI_DEFINED
-#endif
+#define SC16IS7XX_CONTROL_ITEM_SIZE(item, size)  enum { item##_size_must_be_##size##_bytes = 1 / (int)(!!(sizeof(item) == size)) }
 
 //-----------------------------------------------------------------------------
 
@@ -114,9 +106,6 @@ extern "C" {
 
 
 // Device I2C definitions
-#define SC16IS7XX_I2C_READ   ( 0x01u ) //!< Standard I2C LSB bit to set
-#define SC16IS7XX_I2C_WRITE  ( 0xFEu ) //!< Standard I2C bitmask which clear the LSB
-
 #define SC16IS7XX_CHIPADDRESS_BASE  ( 0xE0u ) //!< SC16IS7XX chip base address
 #define SC16IS7XX_CHIPADDRESS_MASK  ( 0xF0u ) //!< SC16IS7XX chip base address
 
@@ -242,8 +231,8 @@ typedef enum
 //********************************************************************************************************************
 
 //! Interrupt Enable Register (Read/Write mode)
-PACKITEM
-typedef union __PACKED__ SC16IS7XX_IER_Register
+SC16IS7XX_PACKITEM
+typedef union __SC16IS7XX_PACKED__ SC16IS7XX_IER_Register
 {
     uint8_t IER;
     struct
@@ -258,8 +247,8 @@ typedef union __PACKED__ SC16IS7XX_IER_Register
         uint8_t CTSIntEnable  : 1; //!< 7 - CTS interrupt enable (This bit in can only be modified if register bit EFR[4] is enabled): '0' => disable the CTS interrupt (normal default condition) ; '1' => enable the CTS interrupt
     } Bits;
 } SC16IS7XX_IER_Register;
-UNPACKITEM
-ControlItemSize(SC16IS7XX_IER_Register, 1);
+SC16IS7XX_UNPACKITEM
+SC16IS7XX_CONTROL_ITEM_SIZE(SC16IS7XX_IER_Register, 1);
 
 #define SC16IS7XX_IER_RHR_INTERRUPT_ENABLE            (0x1u << 0) //!< Enable the Receive Holding Register interrupt
 #define SC16IS7XX_IER_RHR_INTERRUPT_DISABLE           (0x0u << 0) //!< Disable the Receive Holding Register interrupt
@@ -303,8 +292,8 @@ typedef eSC16IS7XX_Interrupts setSC16IS7XX_Interrupts; //! Set of Interrupt Even
 
 
 //! FIFO Control Register (Write mode)
-PACKITEM
-typedef union __PACKED__ SC16IS7XX_FCR_Register
+SC16IS7XX_PACKITEM
+typedef union __SC16IS7XX_PACKED__ SC16IS7XX_FCR_Register
 {
     uint8_t FCR;
     struct
@@ -317,8 +306,8 @@ typedef union __PACKED__ SC16IS7XX_FCR_Register
         uint8_t RxTrigLevel: 2; //!< 6-7 - RX trigger level. Sets the trigger level for the RX FIFO
     } Bits;
 } SC16IS7XX_FCR_Register;
-UNPACKITEM
-ControlItemSize(SC16IS7XX_FCR_Register, 1);
+SC16IS7XX_UNPACKITEM
+SC16IS7XX_CONTROL_ITEM_SIZE(SC16IS7XX_FCR_Register, 1);
 
 #define SC16IS7XX_FCR_RX_TX_FIFO_ENABLE   (0x1u << 0) //!< Enable the transmit and receive FIFO
 #define SC16IS7XX_FCR_RX_TX_FIFO_DISABLE  (0x0u << 0) //!< Disable the transmit and receive FIFO
@@ -358,8 +347,8 @@ typedef enum
 
 
 //! Interrupt Identification Register (Read mode)
-PACKITEM
-typedef union __PACKED__ SC16IS7XX_IIR_Register
+SC16IS7XX_PACKITEM
+typedef union __SC16IS7XX_PACKED__ SC16IS7XX_IIR_Register
 {
     uint8_t IIR;
     struct
@@ -370,8 +359,8 @@ typedef union __PACKED__ SC16IS7XX_IIR_Register
         uint8_t FIFOenable2: 1; //!< 7   - FIFO enable ; mirror the contents of FCR[0]
     } Bits;
 } SC16IS7XX_IIR_Register;
-UNPACKITEM
-ControlItemSize(SC16IS7XX_IIR_Register, 1);
+SC16IS7XX_UNPACKITEM
+SC16IS7XX_CONTROL_ITEM_SIZE(SC16IS7XX_IIR_Register, 1);
 
 #define SC16IS7XX_IIR_NO_INTERRUPT_PENDING  (0x1u << 0) //!< No interrupt is pending
 #define SC16IS7XX_IIR_INTERRUPT_PENDING     (0x0u << 0) //!< An interrupt is pending
@@ -401,8 +390,8 @@ typedef enum
 
 
 //! Line Control Register (Read/Write mode)
-PACKITEM
-typedef union __PACKED__ SC16IS7XX_LCR_Register
+SC16IS7XX_PACKITEM
+typedef union __SC16IS7XX_PACKED__ SC16IS7XX_LCR_Register
 {
     uint8_t LCR;
     struct
@@ -414,8 +403,8 @@ typedef union __PACKED__ SC16IS7XX_LCR_Register
         uint8_t DivLatchEna: 1; //!< 7   - Divisor Latch Enable: '0' => divisor latch disabled (normal default condition) ; '1' => divisor latch enabled
     } Bits;
 } SC16IS7XX_LCR_Register;
-UNPACKITEM
-ControlItemSize(SC16IS7XX_LCR_Register, 1);
+SC16IS7XX_UNPACKITEM
+SC16IS7XX_CONTROL_ITEM_SIZE(SC16IS7XX_LCR_Register, 1);
 
 //! Data length of the UART configuration for the LCR register
 typedef enum
@@ -468,8 +457,8 @@ typedef enum
 
 
 //! Modem Control Register (Read/Write mode)
-PACKITEM
-typedef union __PACKED__ SC16IS7XX_MCR_Register
+SC16IS7XX_PACKITEM
+typedef union __SC16IS7XX_PACKED__ SC16IS7XX_MCR_Register
 {
     uint8_t MCR;
     struct
@@ -484,8 +473,8 @@ typedef union __PACKED__ SC16IS7XX_MCR_Register
         uint8_t ClockDivisor  : 1; //!< 7 - Clock divisor (This bit in can only be modified if register bit EFR[4] is enabled): '0' => divide-by-1 clock input ; '1' => divide-by-4 clock input
     } Bits;
 } SC16IS7XX_MCR_Register;
-UNPACKITEM
-ControlItemSize(SC16IS7XX_MCR_Register, 1);
+SC16IS7XX_UNPACKITEM
+SC16IS7XX_CONTROL_ITEM_SIZE(SC16IS7XX_MCR_Register, 1);
 
 #define SC16IS7XX_MCR_FORCE_DTR_OUTPUT_ACTIVE       (0x1u << 0) //!< Force DTR output to active (LOW)
 #define SC16IS7XX_MCR_FORCE_DTR_OUTPUT_INACTIVE     (0x0u << 0) //!< Force DTR output to inactive (HIGH)
@@ -513,8 +502,8 @@ ControlItemSize(SC16IS7XX_MCR_Register, 1);
 
 
 //! Line Status Register (Read mode only)
-PACKITEM
-typedef union __PACKED__ SC16IS7XX_LSR_Register
+SC16IS7XX_PACKITEM
+typedef union __SC16IS7XX_PACKED__ SC16IS7XX_LSR_Register
 {
     uint8_t LSR;
     struct
@@ -529,8 +518,8 @@ typedef union __PACKED__ SC16IS7XX_LSR_Register
         uint8_t FifoDataError : 1; //!< 7 - FIFO data error: '0' => no error (normal default condition) ; '1' => at least one parity error, framing error, or break indication is in the receiver FIFO. This bit is cleared when no more errors are present in the FIFO
     } Bits;
 } SC16IS7XX_LSR_Register;
-UNPACKITEM
-ControlItemSize(SC16IS7XX_LSR_Register, 1);
+SC16IS7XX_UNPACKITEM
+SC16IS7XX_CONTROL_ITEM_SIZE(SC16IS7XX_LSR_Register, 1);
 
 #define SC16IS7XX_LSR_DATA_IN_RX_FIFO        (0x1u << 0) //!< At least one character in the RX FIFO
 #define SC16IS7XX_LSR_NO_DATA_IN_RX_FIFO     (0x0u << 0) //!< No data in receive FIFO
@@ -570,8 +559,8 @@ typedef eSC16IS7XX_ReceiveError setSC16IS7XX_ReceiveError; //! Set of receive er
 
 
 //! Modem Status Register (Read mode only)
-PACKITEM
-typedef union __PACKED__ SC16IS7XX_MSR_Register
+SC16IS7XX_PACKITEM
+typedef union __SC16IS7XX_PACKED__ SC16IS7XX_MSR_Register
 {
     uint8_t MSR;
     struct
@@ -586,8 +575,8 @@ typedef union __PACKED__ SC16IS7XX_MSR_Register
         uint8_t CD_IO6       : 1; //!< 7 - CD/(IO6) (Only available on the SC16IS75X/76X) ; If GPIO6 is selected as CD modem pin through IOControl register bit 1, the state of CD pin can be read from this bit. This bit is the complement of the CD input. Reading IOState bit 6 does not reflect the true state of CD pin
     } Bits;
 } SC16IS7XX_MSR_Register;
-UNPACKITEM
-ControlItemSize(SC16IS7XX_MSR_Register, 1);
+SC16IS7XX_UNPACKITEM
+SC16IS7XX_CONTROL_ITEM_SIZE(SC16IS7XX_MSR_Register, 1);
 
 #define SC16IS7XX_MSR_CTS_INPUT_CHANGE  (0x1u << 0) //!< dCTS. Indicates that CTS input has changed state. Cleared on a read
 #define SC16IS7XX_MSR_DSR_INPUT_CHANGE  (0x1u << 1) //!< dDSR. Indicates that DSR input has changed state. Cleared on a read
@@ -609,8 +598,8 @@ ControlItemSize(SC16IS7XX_MSR_Register, 1);
 /*! Transmission Control Register
  * @warning TCR[3:0] > TCR[7:4]. Also, the TCR must be programmed with this condition before auto RTS or software flow control is enabled to avoid spurious operation of the device.
  */
-PACKITEM
-typedef union __PACKED__ SC16IS7XX_TCR_Register
+SC16IS7XX_PACKITEM
+typedef union __SC16IS7XX_PACKED__ SC16IS7XX_TCR_Register
 {
     uint8_t TCR;
     struct
@@ -619,8 +608,8 @@ typedef union __PACKED__ SC16IS7XX_TCR_Register
         uint8_t RxTrigResume: 4; //!< 4-7 - RX FIFO trigger level to ask peer to resume transmission. Trigger levels is available from 0 to 60 characters with a granularity of four
     } Bits;
 } SC16IS7XX_TCR_Register;
-UNPACKITEM
-ControlItemSize(SC16IS7XX_TCR_Register, 1);
+SC16IS7XX_UNPACKITEM
+SC16IS7XX_CONTROL_ITEM_SIZE(SC16IS7XX_TCR_Register, 1);
 
 //! Trigger level to ask peer to resume/hold transmission
 typedef enum
@@ -660,8 +649,8 @@ typedef enum
 
 
 //! Trigger Level Register
-PACKITEM
-typedef union __PACKED__ SC16IS7XX_TLR_Register
+SC16IS7XX_PACKITEM
+typedef union __SC16IS7XX_PACKED__ SC16IS7XX_TLR_Register
 {
     uint8_t TLR;
     struct
@@ -670,8 +659,8 @@ typedef union __PACKED__ SC16IS7XX_TLR_Register
         uint8_t RxFIFOlevelTrig: 4; //!< 4-7 - RX FIFO trigger levels (4 to 60), number of characters available
     } Bits;
 } SC16IS7XX_TLR_Register;
-UNPACKITEM
-ControlItemSize(SC16IS7XX_TLR_Register, 1);
+SC16IS7XX_UNPACKITEM
+SC16IS7XX_CONTROL_ITEM_SIZE(SC16IS7XX_TLR_Register, 1);
 
 #define SC16IS7XX_TLR_TX_FIFO_TRIGGER_LEVEL_Pos         0
 #define SC16IS7XX_TLR_TX_FIFO_TRIGGER_LEVEL_Mask        (0xFu << SC16IS7XX_TLR_TX_FIFO_TRIGGER_LEVEL_Pos)
@@ -687,8 +676,8 @@ ControlItemSize(SC16IS7XX_TLR_Register, 1);
 
 
 //! I/O pins Control Register (Only available on the SC16IS75X/SC16IS76X)
-PACKITEM
-typedef union __PACKED__ SC16IS7XX_IOControl_Register
+SC16IS7XX_PACKITEM
+typedef union __SC16IS7XX_PACKED__ SC16IS7XX_IOControl_Register
 {
     uint8_t IOControl;
     struct
@@ -700,8 +689,8 @@ typedef union __PACKED__ SC16IS7XX_IOControl_Register
         uint8_t               : 4; //!< 4-7
     } Bits;
 } SC16IS7XX_IOControl_Register;
-UNPACKITEM
-ControlItemSize(SC16IS7XX_IOControl_Register, 1);
+SC16IS7XX_UNPACKITEM
+SC16IS7XX_CONTROL_ITEM_SIZE(SC16IS7XX_IOControl_Register, 1);
 
 #define SC16IS7XX_IOCTRL_LATCH_INPUT_VALUES_ENABLE   (0x1u << 0) //!< Input values are latched. A change in the input generates an interrupt and the input logic value is loaded in the bit of the corresponding input state register (IOState). A read of the IOState register clears the interrupt. If the input pin goes back to its initial logic state before the interrupt register is read, then the interrupt is not cleared and the corresponding bit of the IOState register keeps the logic value that initiates the interrupt
 #define SC16IS7XX_IOCTRL_LATCH_INPUT_VALUES_DISABLE  (0x0u << 0) //!< Input value are not latched. A change in any input generates an interrupt. A read of the input register clears the interrupt. If the input goes back to its initial logic state before the input register is read, then the interrupt is cleared
@@ -719,8 +708,8 @@ ControlItemSize(SC16IS7XX_IOControl_Register, 1);
 
 
 //! Extra Features Register (Read/Write mode)
-PACKITEM
-typedef union __PACKED__ SC16IS7XX_EFCR_Register
+SC16IS7XX_PACKITEM
+typedef union __SC16IS7XX_PACKED__ SC16IS7XX_EFCR_Register
 {
     uint8_t EFCR;
     struct
@@ -735,8 +724,8 @@ typedef union __PACKED__ SC16IS7XX_EFCR_Register
         uint8_t IrDAmode          : 1; //!< 7 - IrDA mode (slow/fast) (IrDA mode slow/fast for SC16IS76X, slow only for SC16IS75X): '0' => IrDA SIR, 3/16 pulse ratio, data rate up to 115.2 kbit/s ; '1' => IrDA SIR, 1/4 pulse ratio, data rate up to 1.152 Mbit/s
     } Bits;
 } SC16IS7XX_EFCR_Register;
-UNPACKITEM
-ControlItemSize(SC16IS7XX_EFCR_Register, 1);
+SC16IS7XX_UNPACKITEM
+SC16IS7XX_CONTROL_ITEM_SIZE(SC16IS7XX_EFCR_Register, 1);
 
 #define SC16IS7XX_EFCR_9BIT_MODE_ENABLE       (0x1u << 0) //!< Enable 9-bit or Multidrop mode (RS-485)
 #define SC16IS7XX_EFCR_9BIT_MODE_DISABLE      (0x0u << 0) //!< Disable 9-bit or Multidrop mode (RS-485)
@@ -759,8 +748,8 @@ ControlItemSize(SC16IS7XX_EFCR_Register, 1);
 
 
 //! Enhanced Feature Register (Read/Write mode)
-PACKITEM
-typedef union __PACKED__ SC16IS7XX_EFR_Register
+SC16IS7XX_PACKITEM
+typedef union __SC16IS7XX_PACKED__ SC16IS7XX_EFR_Register
 {
     uint8_t EFR;
     struct
@@ -772,8 +761,8 @@ typedef union __PACKED__ SC16IS7XX_EFR_Register
         uint8_t AutoCTS        : 1; //!< 7   - Auto CTS: '0' => CTS flow control is disabled (normal default condition) ; '1' => CTS flow control is enabled. Transmission will stop when a HIGH signal is detected on the CTS pin
     } Bits;
 } SC16IS7XX_EFR_Register;
-UNPACKITEM
-ControlItemSize(SC16IS7XX_EFR_Register, 1);
+SC16IS7XX_UNPACKITEM
+SC16IS7XX_CONTROL_ITEM_SIZE(SC16IS7XX_EFR_Register, 1);
 
 //! Software flow transmitter and receiver control configuration for the EFR register
 typedef enum
@@ -817,8 +806,8 @@ typedef enum
 
 
 //! SPI byte command (Read/Write mode)
-PACKITEM
-typedef union __PACKED__ SC16IS7XX_SPIcommand
+SC16IS7XX_PACKITEM
+typedef union __SC16IS7XX_PACKED__ SC16IS7XX_SPIcommand
 {
     uint8_t SPIdata;
     struct
@@ -829,15 +818,15 @@ typedef union __PACKED__ SC16IS7XX_SPIcommand
         uint8_t ReadWrite: 1; //!< 7   - Read/Write: '0' => write to Device ; '1' => read from Device
     } Bits;
 } SC16IS7XX_SPIcommand;
-UNPACKITEM
-ControlItemSize(SC16IS7XX_SPIcommand, 1);
+SC16IS7XX_UNPACKITEM
+SC16IS7XX_CONTROL_ITEM_SIZE(SC16IS7XX_SPIcommand, 1);
 
 #define SC16IS7XX_SPI_READ   (0x1u << 0) //!< Set the SPI read
 #define SC16IS7XX_SPI_WRITE  (0x0u << 0) //!< Set the SPI write
 
 //! I2C byte command
-PACKITEM
-typedef union __PACKED__ SC16IS7XX_I2Ccommand
+SC16IS7XX_PACKITEM
+typedef union __SC16IS7XX_PACKED__ SC16IS7XX_I2Ccommand
 {
     uint8_t I2Cdata;
     struct
@@ -848,8 +837,8 @@ typedef union __PACKED__ SC16IS7XX_I2Ccommand
         uint8_t        : 1; //!< 7
     } Bits;
 } SC16IS7XX_I2Ccommand;
-UNPACKITEM
-ControlItemSize(SC16IS7XX_I2Ccommand, 1);
+SC16IS7XX_UNPACKITEM
+SC16IS7XX_CONTROL_ITEM_SIZE(SC16IS7XX_I2Ccommand, 1);
 
 #define SC16IS7XX_CHANNEL_Pos          1
 #define SC16IS7XX_CHANNEL_Mask         (0x3u << SC16IS7XX_CHANNEL_Pos)
@@ -893,91 +882,40 @@ typedef struct SC16IS7XX SC16IS7XX; //! SC16IS7XX component object structure
 
 
 
-#ifdef SC16IS7XX_I2C_DEFINED
-/*! @brief Interface function for driver initialization of the SC16IS7XX
- *
- * This function will be called at driver initialization to configure the interface driver
- * @param[in] *pIntDev Is the SC16IS7XX.InterfaceDevice of the device that call the interface initialization
- * @param[in] sclFreq Is the SCL frequency in Hz to set at the interface initialization
- * @return Returns an #eERRORRESULT value enum
- */
-typedef eERRORRESULT (*SC16IS7XX_I2CInit_Func)(void *pIntDev, const uint32_t sclFreq);
-
-
-/*! @brief Interface function for I2C transfer of the SC16IS7XX
- *
- * This function will be called when the driver needs to transfer data over the I2C communication with the device
- * Can be a read of data or a transmit of data. It also indicate if it needs a start and/or a stop
- * The maximim data that the driver will transmit between a start and a stop/restart is 832*2 bytes
- * @warning A I2CInit_Func() must be called before using this function
- * @param[in] *pIntDev Is the SC16IS7XX.InterfaceDevice of the device that call the I2C transfer
- * @param[in] deviceAddress Is the device address on the bus (8-bits only). The LSB bit indicate if it is a I2C Read (bit at '1') or a I2C Write (bit at '0')
- * @param[in,out] *data Is a pointer to memory data to write in case of I2C Write, or where the data received will be stored in case of I2C Read (can be NULL if no data transfer other than chip address)
- * @param[in] byteCount Is the byte count to write over the I2C bus or the count of byte to read over the bus
- * @param[in] start Indicate if the transfer needs a start (in case of a new transfer) or restart (if the previous transfer have not been stopped)
- * @param[in] stop Indicate if the transfer needs a stop after the last byte sent
- * @return Returns an #eERRORRESULT value enum
- */
-typedef eERRORRESULT (*SC16IS7XX_I2CTransfer_Func)(void *pIntDev, const uint8_t deviceAddress, uint8_t *data, size_t byteCount, bool start, bool stop);
-#endif
-
-
-
-#ifdef SC16IS7XX_SPI_DEFINED
-/*! @brief Function for interface driver initialization of the SC16IS7XX
- *
- * This function will be called at driver initialization to configure the interface driver
- * @param[in] *pIntDev Is the SC16IS7XX.InterfaceDevice of the device that call the interface initialization
- * @param[in] chipSelect Is the Chip Select index to use for the SPI initialization
- * @param[in] sckFreq Is the SCK frequency in Hz to set at the interface initialization
- * @return Returns an #eERRORRESULT value enum
- */
-typedef eERRORRESULT (*SC16IS7XX_SPIInit_Func)(void *pIntDev, uint8_t chipSelect, const uint32_t sckFreq);
-
-
-/*! @brief Function for interface transfer of the SC16IS7XX
- *
- * This function will be called at driver read/write data from/to the interface driver
- * @param[in] *pIntDev Is the SC16IS7XX.InterfaceDevice of the device that call the data transfer
- * @param[in] chipSelect Is the Chip Select index to use for the SPI transfer
- * @param[in] *txData Is the data to send through the interface
- * @param[out] *rxData Is where the data received through the interface will be stored. This parameter can be nulled by the driver if no received data is expected
- * @param[in] size Is the size of the data to send and receive through the interface
- * @param[in] terminate Ask to terminate the current transfer
- * @return Returns an #eERRORRESULT value enum
- */
-typedef eERRORRESULT (*SC16IS7XX_SPITransfer_Func)(void *pIntDev, uint8_t chipSelect, uint8_t *txData, uint8_t *rxData, size_t size, bool terminate);
-#endif
-
-
-
 //! SC16IS7XX device object structure
 struct SC16IS7XX
 {
   //--- Device configuration ---
-  void *UserDriverData;                      //!< Optional, can be used to store driver data or NULL
-  uint32_t XtalFreq;                         //!< Component Xtal frequency (maximum 80MHz). Set it to 0 if oscillator is used
-  uint32_t OscFreq;                          //!< Component oscillator frequency (maximum 24MHz). Set it to 0 if crystal is used
-  eSC16IS7XX_PN DevicePN;                    //!< Part number of the device
-  eSC16IS7XX_Interface Interface;            //!< Interface to use with this device
+  void *UserDriverData;           //!< Optional, can be used to store driver data or NULL
+  uint32_t XtalFreq;              //!< Component Xtal frequency (maximum 80MHz). Set it to 0 if oscillator is used
+  uint32_t OscFreq;               //!< Component oscillator frequency (maximum 24MHz). Set it to 0 if crystal is used
+  eSC16IS7XX_PN DevicePN;         //!< Part number of the device
 
   //--- Interface driver call functions ---
+  eSC16IS7XX_Interface Interface; //!< Interface to use with this device
 #ifdef SC16IS7XX_I2C_DEFINED
-  uint8_t I2Caddress;                        //!< Address I2C of the device (0x90 to 0xAE). Use defines SC16IS7XX_ADDRESS_A1x_A0x
-  SC16IS7XX_I2CInit_Func    fnI2C_Init;      //!< This function will be called at driver initialization to configure the interface driver
-  SC16IS7XX_I2CTransfer_Func fnI2C_Transfer; //!< This function will be called when the driver needs to transfer data over the I2C communication with the device
+  uint8_t I2Caddress;             //!< Address I2C of the device (0x90 to 0xAE). Use defines SC16IS7XX_ADDRESS_A1x_A0x
+#  ifdef USE_DYNAMIC_INTERFACE
+  I2C_Interface* I2C;             //!< This is the I2C_Interface descriptor pointer that will be used to communicate with the device
+#  else
+  I2C_Interface I2C;              //!< This is the I2C_Interface descriptor that will be used to communicate with the device
+#  endif
 #endif
 #ifdef SC16IS7XX_SPI_DEFINED
-  uint8_t SPI_ChipSelect;                    //!< This is the Chip Select index that will be set at the call of a transfer
-  SC16IS7XX_SPIInit_Func     fnSPI_Init;     //!< This function will be called at driver initialization to configure the interface driver
-  SC16IS7XX_SPITransfer_Func fnSPI_Transfer; //!< This function will be called at driver read/write data from/to the interface driver SPI
+  uint8_t SPIchipSelect;          //!< This is the Chip Select index that will be set at the call of a transfer
+#  ifdef USE_DYNAMIC_INTERFACE
+  SPI_Interface* SPI;             //!< This is the SPI_Interface descriptor pointer that will be used to communicate with the device
+#  else
+  SPI_Interface SPI;              //!< This is the SPI_Interface descriptor that will be used to communicate with the device
+#  endif
 #endif
-  uint32_t InterfaceClockSpeed;              //!< SPI/I2C clock speed
-  void *InterfaceDevice;                     //!< This is the pointer that will be in the first parameter of all interface call functions
+  uint32_t InterfaceClockSpeed;   //!< SPI/I2C clock speed
 
   //--- GPIO configuration ---
-  uint8_t GPIOsOutState;                     //!< GPIOs pins output state (0 = set to '0' ; 1 = set to '1'). Used to speed up output change
+  uint8_t GPIOsOutState;          //!< GPIOs pins output state (0 = set to '0' ; 1 = set to '1'). Used to speed up output change
 };
+
+//-----------------------------------------------------------------------------
 
 
 
@@ -1199,7 +1137,8 @@ eERRORRESULT SC16IS7XX_ConfigureGPIOs(SC16IS7XX *pComp, uint8_t pinsDirection, u
  * @param[in] pinsChangeMask If the bit is set to '1', then the corresponding GPIO have to be modified
  * @return Returns an #eERRORRESULT value enum
  */
-eERRORRESULT SC16IS7XX_SetGPIOPinsDirection(SC16IS7XX *pComp, uint8_t pinsDirection, uint8_t pinsChangeMask);
+eERRORRESULT SC16IS7XX_SetGPIOPinsDirection(SC16IS7XX *pComp, const uint8_t pinsDirection, const uint8_t pinsChangeMask);
+eERRORRESULT SC16IS7XX_SetGPIOPinsDirection_Gen(GPIO_Interface *pIntDev, const uint32_t pinDirection, const uint32_t pinChangeMask);
 
 
 /*! @brief Get I/O pins input level of the SC16IS75X/76X
@@ -1209,6 +1148,7 @@ eERRORRESULT SC16IS7XX_SetGPIOPinsDirection(SC16IS7XX *pComp, uint8_t pinsDirect
  * @return Returns an #eERRORRESULT value enum
  */
 eERRORRESULT SC16IS7XX_GetGPIOPinsInputLevel(SC16IS7XX *pComp, uint8_t *pinsState);
+eERRORRESULT SC16IS7XX_GetGPIOPinsInputLevel_Gen(GPIO_Interface *pIntDev, uint32_t *pinsState);
 
 
 /*! @brief Set I/O pins output level of the SC16IS75X/76X
@@ -1218,7 +1158,8 @@ eERRORRESULT SC16IS7XX_GetGPIOPinsInputLevel(SC16IS7XX *pComp, uint8_t *pinsStat
  * @param[in] pinsChangeMask If the bit is set to '1', then the corresponding GPIO have to be modified
  * @return Returns an #eERRORRESULT value enum
  */
-eERRORRESULT SC16IS7XX_SetGPIOPinsOutputLevel(SC16IS7XX *pComp, uint8_t pinsLevel, uint8_t pinsChangeMask);
+eERRORRESULT SC16IS7XX_SetGPIOPinsOutputLevel(SC16IS7XX *pComp, const uint8_t pinsLevel, const uint8_t pinsChangeMask);
+eERRORRESULT SC16IS7XX_SetGPIOPinsOutputLevel_Gen(GPIO_Interface *pIntDev, const uint32_t pinLevel, const uint32_t pinChangeMask);
 
 
 /*! @brief Set I/O pins interrupt enable of the SC16IS75X/76X
@@ -1265,11 +1206,11 @@ struct SC16IS7XX_UART
 {
   //--- UART configuration ---
   eSC16IS7XX_Channel Channel;             //!< UART channel of the SC16IS7XX
-  setSC16IS7XX_DriverConfig DriverConfig; //!< UART driver configuration, by default it is DRIVER_NORMAL_USE. Configuration can be OR'ed
+  setSC16IS7XX_DriverConfig DriverConfig; //!< UART driver configuration. Configuration can be OR'ed
 
   //--- Device configuration ---
-  void *UserDriverData;       //!< Optional, can be used to store driver data or NULL
-  SC16IS7XX *Device;          //!< SC16IS7XX device where this UART comes from
+  void *UserDriverData;                   //!< Optional, can be used to store driver data or NULL
+  SC16IS7XX *Device;                      //!< SC16IS7XX device where this UART comes from
 };
 
 //-----------------------------------------------------------------------------
@@ -1646,11 +1587,6 @@ bool SC16IS7XX_IsClearToSend(SC16IS7XX_UART *pUART);
 
 
 
-//-----------------------------------------------------------------------------
-#undef __PACKED__
-#undef PACKITEM
-#undef UNPACKITEM
-#undef ControlItemSize
 //-----------------------------------------------------------------------------
 /// @cond 0
 /**INDENT-OFF**/
