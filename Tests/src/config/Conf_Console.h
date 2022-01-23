@@ -18,7 +18,7 @@
 #define USE_CONSOLE_TX
 #ifdef USE_CONSOLE_TX
    // This define adds the code for ANSI Escape sequences on transmit
-#  define USE_ANSI_ESCAPE_TX
+//#  define USE_ANSI_ESCAPE_TX
 #endif
 
 // This define adds the code for console receive

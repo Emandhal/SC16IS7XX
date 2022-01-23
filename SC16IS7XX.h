@@ -18,7 +18,7 @@
  ******************************************************************************/
 /* @page License
  *
- * Copyright (c) 2020 Fabien MAILLY
+ * Copyright (c) 2020-22 Fabien MAILLY
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -64,12 +64,15 @@
 
 //-----------------------------------------------------------------------------
 #include "ErrorsDef.h"
-#include "GPIO_Interface.h"
 #ifdef SC16IS7XX_I2C_DEFINED
 #  include "I2C_Interface.h"
 #endif
 #ifdef SC16IS7XX_SPI_DEFINED
 #  include "SPI_Interface.h"
+#endif
+#ifdef USE_GENERICS_DEFINED
+#  include "GPIO_Interface.h"
+#  include "UART_Interface.h"
 #endif
 //-----------------------------------------------------------------------------
 #ifdef __cplusplus
@@ -150,14 +153,14 @@ typedef enum
 
 
 // GPIO pin masks definition
-#define  SC16IS7XX_GPIO0_MASK  ( 1 << 0 ) //! Mask for GPIO0
-#define  SC16IS7XX_GPIO1_MASK  ( 1 << 1 ) //! Mask for GPIO1
-#define  SC16IS7XX_GPIO2_MASK  ( 1 << 2 ) //! Mask for GPIO2
-#define  SC16IS7XX_GPIO3_MASK  ( 1 << 3 ) //! Mask for GPIO3
-#define  SC16IS7XX_GPIO4_MASK  ( 1 << 4 ) //! Mask for GPIO4
-#define  SC16IS7XX_GPIO5_MASK  ( 1 << 5 ) //! Mask for GPIO5
-#define  SC16IS7XX_GPIO6_MASK  ( 1 << 6 ) //! Mask for GPIO6
-#define  SC16IS7XX_GPIO7_MASK  ( 1 << 7 ) //! Mask for GPIO7
+#define SC16IS7XX_GPIO0_MASK  ( 1 << 0 ) //! Mask for GPIO0
+#define SC16IS7XX_GPIO1_MASK  ( 1 << 1 ) //! Mask for GPIO1
+#define SC16IS7XX_GPIO2_MASK  ( 1 << 2 ) //! Mask for GPIO2
+#define SC16IS7XX_GPIO3_MASK  ( 1 << 3 ) //! Mask for GPIO3
+#define SC16IS7XX_GPIO4_MASK  ( 1 << 4 ) //! Mask for GPIO4
+#define SC16IS7XX_GPIO5_MASK  ( 1 << 5 ) //! Mask for GPIO5
+#define SC16IS7XX_GPIO6_MASK  ( 1 << 6 ) //! Mask for GPIO6
+#define SC16IS7XX_GPIO7_MASK  ( 1 << 7 ) //! Mask for GPIO7
 
 //-----------------------------------------------------------------------------
 
@@ -218,9 +221,13 @@ typedef enum
   RegSC16IS7XX_XOFF2     = 0x07u, //!< R/W   mode: Xoff2 word
 } eSC16IS7XX_Registers;
 
-#define SC16IS7XX_LCR_VALUE_SET_SPECIAL_REGISTER           ( 0xC0 ) //! Special value of LCR register to access Special Registers (note "The special register set is accessible only when LCR[7] = 1 and not 0xBF" of Table 10 in the datasheet)
-#define SC16IS7XX_LCR_VALUE_SET_ENHANCED_FEATURE_REGISTER  ( 0xBF ) //! Special value of LCR register to access Special Registers (note "Enhanced Feature Registers are only accessible when LCR = 0xBF" of Table 10 in the datasheet)
-#define SC16IS7XX_LCR_VALUE_SET_GENERAL_REGISTER           ( ~(0x1u << 7) ) //!< Special value of LCR[7] register to access General Registers (note "These registers are accessible only when LCR[7] = 0" of Table 10 in the datasheet)
+//! SC16IS7XX registers list
+typedef enum
+{
+  SC16IS7XX_LCR_VALUE_SET_SPECIAL_REGISTER          = 0xC0,         //! Special value of LCR register to access Special Registers (note "The special register set is accessible only when LCR[7] = 1 and not 0xBF" of Table 10 in the datasheet)
+  SC16IS7XX_LCR_VALUE_SET_ENHANCED_FEATURE_REGISTER = 0xBF,         //! Special value of LCR register to access Special Registers (note "Enhanced Feature Registers are only accessible when LCR = 0xBF" of Table 10 in the datasheet)
+  SC16IS7XX_LCR_VALUE_SET_GENERAL_REGISTER          = ~(0x1u << 7), //!< Special value of LCR[7] register to access General Registers (note "These registers are accessible only when LCR[7] = 0" of Table 10 in the datasheet)
+} eSC16IS7XX_AccessTo;
 
 
 
@@ -821,8 +828,8 @@ typedef union __SC16IS7XX_PACKED__ SC16IS7XX_SPIcommand
 SC16IS7XX_UNPACKITEM
 SC16IS7XX_CONTROL_ITEM_SIZE(SC16IS7XX_SPIcommand, 1);
 
-#define SC16IS7XX_SPI_READ   (0x1u << 0) //!< Set the SPI read
-#define SC16IS7XX_SPI_WRITE  (0x0u << 0) //!< Set the SPI write
+#define SC16IS7XX_SPI_READ   (0x1u << 7) //!< Set the SPI read
+#define SC16IS7XX_SPI_WRITE  (0x0u << 7) //!< Set the SPI write
 
 //! I2C byte command
 SC16IS7XX_PACKITEM
@@ -923,9 +930,9 @@ struct SC16IS7XX
 typedef struct SC16IS7XX_Config
 {
   //--- GPIOs configuration ---
-  uint8_t StartupPinsDirection; //!< Startup GPIOs direction
-  uint8_t StartupPinsLevel;     //!< Startup GPIOs output level
-  uint8_t PinsInterruptEnable;  //!< GPIOs individual Interrupt Enable
+  uint8_t StartupPinsDirection; //!< Startup GPIOs direction (0 = set to '0' ; 1 = set to '1')
+  uint8_t StartupPinsLevel;     //!< Startup GPIOs output level (0 = output ; 1 = input)
+  uint8_t PinsInterruptEnable;  //!< GPIOs individual Interrupt (0 = disable ; 1 = enable)
 } SC16IS7XX_Config;
 
 //********************************************************************************************************************
@@ -936,7 +943,7 @@ typedef struct SC16IS7XX_Config
 
 /*! @brief SC16IS7XX initialization
  *
- * This function initialize the SC16IS7XX driver, call the initialisation of the interface driver, ans soft reset the device. It also check the hardware communication with the device
+ * This function initialize the SC16IS7XX driver, call the initialization of the interface driver, ans soft reset the device. It also check the hardware communication with the device
  * @param[in] *pComp Is the pointed structure of the device to be initialized
  * @param[in] *pConf Is the pointed structure of the device configuration. This is mainly the GPIOs startup configuration. This parameter can be NULL if the configuration of GPIO is not helpful
  * @return Returns an #eERRORRESULT value enum
@@ -1052,17 +1059,17 @@ eERRORRESULT SC16IS7XX_ModifyRegister(SC16IS7XX *pComp, const eSC16IS7XX_Channel
  * @param[out] *originalLCRregValue Is the data of the LCR register before setting access
  * @return Returns an #eERRORRESULT value enum
  */
-eERRORRESULT SC16IS7XX_SetRegisterAccess(SC16IS7XX *pComp, const eSC16IS7XX_Channel channel, uint8_t setAccessTo, uint8_t *originalLCRregValue);
+eERRORRESULT SC16IS7XX_SetRegisterAccess(SC16IS7XX *pComp, const eSC16IS7XX_Channel channel, eSC16IS7XX_AccessTo setAccessTo, uint8_t *originalLCRregValue);
 
 
 /*! @brief Return access to general registers of the SC16IS7XX
  *
  * @param[in] *pComp Is the pointed structure of the device
  * @param[in] channel Is the UART channel to use
- * @param[in] *originalLCRregValue Is the data of the LCR register before setting access
+ * @param[in] originalLCRregValue Is the data of the LCR register before setting access
  * @return Returns an #eERRORRESULT value enum
  */
-eERRORRESULT SC16IS7XX_ReturnAccessToGeneralRegister(SC16IS7XX *pComp, const eSC16IS7XX_Channel channel, uint8_t *originalLCRregValue);
+eERRORRESULT SC16IS7XX_ReturnAccessToGeneralRegister(SC16IS7XX *pComp, const eSC16IS7XX_Channel channel, uint8_t originalLCRregValue);
 
 //-----------------------------------------------------------------------------
 
@@ -1132,34 +1139,40 @@ eERRORRESULT SC16IS7XX_ConfigureGPIOs(SC16IS7XX *pComp, uint8_t pinsDirection, u
 
 /*! @brief Set I/O pins direction of the SC16IS75X/76X
  *
- * @param[in] *pComp Is the pointed structure of the device to be used
- * @param[in] pinsDirection Set the IO pins direction, if bit is '1' then the corresponding GPIO is output else it's input
+ * @param[in] *pComp/pIntDev Is the pointed structure of the device to be used
+ * @param[in] pinsDirection Set the IO pins direction, if bit is '1' then the corresponding GPIO is input else it's output
  * @param[in] pinsChangeMask If the bit is set to '1', then the corresponding GPIO have to be modified
  * @return Returns an #eERRORRESULT value enum
  */
 eERRORRESULT SC16IS7XX_SetGPIOPinsDirection(SC16IS7XX *pComp, const uint8_t pinsDirection, const uint8_t pinsChangeMask);
-eERRORRESULT SC16IS7XX_SetGPIOPinsDirection_Gen(GPIO_Interface *pIntDev, const uint32_t pinDirection, const uint32_t pinChangeMask);
+#ifdef USE_GENERICS_DEFINED
+eERRORRESULT SC16IS7XX_SetGPIOPinsDirection_Gen(GPIO_Interface *pIntDev, const uint32_t pinsDirection, const uint32_t pinsChangeMask);
+#endif
 
 
 /*! @brief Get I/O pins input level of the SC16IS75X/76X
  *
- * @param[in] *pComp Is the pointed structure of the device to be used
+ * @param[in] *pComp/pIntDev Is the pointed structure of the device to be used
  * @param[out] *pinsState Return the actual level of all I/O pins. If bit is '1' then the corresponding GPIO is level high else it's level low
  * @return Returns an #eERRORRESULT value enum
  */
 eERRORRESULT SC16IS7XX_GetGPIOPinsInputLevel(SC16IS7XX *pComp, uint8_t *pinsState);
+#ifdef USE_GENERICS_DEFINED
 eERRORRESULT SC16IS7XX_GetGPIOPinsInputLevel_Gen(GPIO_Interface *pIntDev, uint32_t *pinsState);
+#endif
 
 
 /*! @brief Set I/O pins output level of the SC16IS75X/76X
  *
- * @param[in] *pComp Is the pointed structure of the device to be used
+ * @param[in] *pComp/pIntDev Is the pointed structure of the device to be used
  * @param[in] pinsLevel Set the IO pins output level, if bit is '1' then the corresponding GPIO is level high else it's level low
  * @param[in] pinsChangeMask If the bit is set to '1', then the corresponding GPIO have to be modified
  * @return Returns an #eERRORRESULT value enum
  */
 eERRORRESULT SC16IS7XX_SetGPIOPinsOutputLevel(SC16IS7XX *pComp, const uint8_t pinsLevel, const uint8_t pinsChangeMask);
-eERRORRESULT SC16IS7XX_SetGPIOPinsOutputLevel_Gen(GPIO_Interface *pIntDev, const uint32_t pinLevel, const uint32_t pinChangeMask);
+#ifdef USE_GENERICS_DEFINED
+eERRORRESULT SC16IS7XX_SetGPIOPinsOutputLevel_Gen(GPIO_Interface *pIntDev, const uint32_t pinsLevel, const uint32_t pinsChangeMask);
+#endif
 
 
 /*! @brief Set I/O pins interrupt enable of the SC16IS75X/76X
@@ -1416,18 +1429,6 @@ eERRORRESULT SC16IS7XX_SetUARTBaudRate(SC16IS7XX_UART *pUART, const SC16IS7XX_UA
 //-----------------------------------------------------------------------------
 
 
-
-/*! @brief Configure interrupt of the SC16IS7XX device
- *
- * @param[in] *pUART Is the pointed structure of the UART to be used
- * @param[in] useFIFOs Set to 'true' to use the transmit and receive FIFO. Set 'false' to disable transmit and receive FIFO, only the THR and the RHR will be use for UART communication
- * @param[in] txTrigLvl Set the trigger level of the transmit FIFO
- * @param[in] rxTrigLvl Set the trigger level of the receive FIFO
- * @return Returns an #eERRORRESULT value enum
- */
-eERRORRESULT SC16IS7XX_ConfigureFIFOs(SC16IS7XX_UART *pUART, bool useFIFOs, eSC16IS7XX_TriggerCtrlLevel txTrigLvl, eSC16IS7XX_TriggerCtrlLevel rxTrigLvl);
-
-
 /*! @brief Reset Rx and/or Tx FIFO of the SC16IS7XX
  *
  * @param[in] *pUART Is the pointed structure of the UART to be used
@@ -1520,13 +1521,16 @@ eERRORRESULT SC16IS7XX_GetDataCountRxFIFO(SC16IS7XX_UART *pUART, uint8_t *dataCo
 
 /*! @brief Try to transmit data to UART FIFO of the SC16IS7XX
  *
- * @param[in] *pUART Is the pointed structure of the UART to be used
+ * @param[in] *pUART/pIntDev Is the pointed structure of the UART to be used
  * @param[in] *data Is the data array to send to the UART transmiter through the transmit FIFO
- * @param[in] count Is the count of data to send  to the UART transmitter through the transmit FIFO
+ * @param[in] size Is the count of data to send to the UART transmitter through the transmit FIFO
  * @param[out] *actuallySent Is the count of data actually sent to the transmit FIFO (0 to 64 chars)
  * @return Returns an #eERRORRESULT value enum
  */
-eERRORRESULT SC16IS7XX_TryTransmitData(SC16IS7XX_UART *pUART, uint8_t *data, size_t count, size_t *actuallySent);
+eERRORRESULT SC16IS7XX_TryTransmitData(SC16IS7XX_UART *pUART, uint8_t *data, size_t size, size_t *actuallySent);
+#ifdef USE_GENERICS_DEFINED
+eERRORRESULT SC16IS7XX_TryTransmitData_Gen(UART_Interface *pIntDev, uint8_t *data, size_t size, size_t *actuallySent);
+#endif
 
 
 /*! @brief Transmit data to UART FIFO of the SC16IS7XX
@@ -1541,20 +1545,24 @@ eERRORRESULT SC16IS7XX_TransmitChar(SC16IS7XX_UART *pUART, const uint8_t data);
 /*! @brief Receive available data from UART FIFO of the SC16IS7XX
  *
  * This function will stop receiving data from FIFO at first char error if the DriverConfig is SC16IS7XX_DRIVER_SAFE_RX
- * @param[in] *pUART Is the pointed structure of the UART to be used
- * @param[in] *data Is where the data will be stored
+ * @param[in] *pUART/pIntDev Is the pointed structure of the UART to be used
+ * @param[out] *data Is where the data will be stored
+ * @param[in] size Is the count of data that the data buffer can hold
  * @param[out] *actuallyReceived Is the count of data actually received from the received FIFO (0 to 64 chars)
- * @param[in] *lastCharError Is the last char received error. Set to 0 if no errors
+ * @param[out] *lastCharError Is the last char received error. Set to 0 if no errors
  * @return Returns an #eERRORRESULT value enum
  */
-eERRORRESULT SC16IS7XX_ReceiveData(SC16IS7XX_UART *pUART, uint8_t *data, size_t *actuallyReceived, uint8_t *lastCharError);
+eERRORRESULT SC16IS7XX_ReceiveData(SC16IS7XX_UART *pUART, uint8_t *data, size_t size, size_t *actuallyReceived, uint8_t *lastCharError);
+#ifdef USE_GENERICS_DEFINED
+eERRORRESULT SC16IS7XX_ReceiveData_Gen(UART_Interface *pIntDev, uint8_t *data, size_t size, size_t *actuallyReceived, uint8_t *lastCharError);
+#endif
 
 
 /*! @brief Receive data from UART FIFO of the SC16IS7XX
  *
  * @param[in] *pUART Is the pointed structure of the UART to be used
- * @param[in] *data Is where the data will be stored
- * @param[in] *charError Is the char received error. Set to 0 if no errors
+ * @param[out] *data Is where the data will be stored
+ * @param[out] *charError Is the char received error. Set to 0 if no errors
  * @return Returns an #eERRORRESULT value enum
  */
 eERRORRESULT SC16IS7XX_ReceiveChar(SC16IS7XX_UART *pUART, uint8_t *data, setSC16IS7XX_ReceiveError *charError);
@@ -1588,12 +1596,8 @@ bool SC16IS7XX_IsClearToSend(SC16IS7XX_UART *pUART);
 
 
 //-----------------------------------------------------------------------------
-/// @cond 0
-/**INDENT-OFF**/
 #ifdef __cplusplus
 }
 #endif
-/**INDENT-ON**/
-/// @endcond
 //-----------------------------------------------------------------------------
 #endif /* SC16IS7XX_H_INC */

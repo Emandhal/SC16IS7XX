@@ -40,7 +40,7 @@
 
 // If in debug mode, check NULL parameters that are mandatory in each functions of the driver
 #ifdef DEBUG
-//#  define CHECK_NULL_PARAM  // Set in the symbols of the C compiler of the project
+#  define CHECK_NULL_PARAM  // Set in the symbols of the C compiler of the project
 #endif
 
 
@@ -54,10 +54,14 @@
 /** Enable Com Port. */
 #define CONF_BOARD_UART_CONSOLE
 
+/** Enable SDRAMC feature */
+#define CONF_BOARD_SDRAMC
+
 /** Configure TWIHS on board */
-#if !defined(SOFT_I2C)
-#  define CONF_BOARD_TWIHS0
-#endif
+#define CONF_BOARD_TWIHS0
+
+/** Configure SPI on board */
+#define CONF_BOARD_SPI
 
 
 

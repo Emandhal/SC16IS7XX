@@ -56,6 +56,9 @@
 #include <compiler.h>
 #include <status_codes.h>
 
+// From module: Delay routines
+#include <delay.h>
+
 // From module: GPIO - General purpose Input/Output
 #include <gpio.h>
 
@@ -84,14 +87,36 @@
 // From module: SAM FPU driver
 #include <fpu.h>
 
+// From module: SAM SDRAMC Driver
+#include <sdramc.h>
+
 // From module: SAMV71 XULTRA LED support enabled
 #include <led.h>
 
-// From module: SPI - Serial Peripheral Interface
-#include <spi.h>
+// From module: SDRAMC configuration for IS42S16100E
+#include <is42s16100e.h>
+
+// From module: Sleep manager - SAM implementation
+#include <sam/sleepmgr.h>
+#include <sleepmgr.h>
+
+// From module: Standard serial I/O (stdio) - SAM implementation
+#include <stdio_serial.h>
 
 // From module: System Clock Control - SAMV71 implementation
 #include <sysclk.h>
+
+// From module: UART - Univ. Async Rec/Trans
+#include <uart.h>
+
+// From module: USART - Serial interface - SAM implementation for devices with both UART and USART
+#include <serial.h>
+
+// From module: USART - Univ. Syn Async Rec/Trans
+#include <usart.h>
+
+// From module: WDT - Watchdog Timer
+#include <wdt.h>
 
 // From module: pio_handler support enabled
 #include <pio_handler.h>

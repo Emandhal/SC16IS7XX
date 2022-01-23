@@ -26,19 +26,12 @@ extern "C" {
 #endif
 //-----------------------------------------------------------------------------
 
-#ifdef SC16IS7XX_I2C_DEFINED
-#  ifdef USE_DYNAMIC_INTERFACE
-#    define GET_I2C_INTERFACE(dev)  dev->I2C
-#  else
-#    define GET_I2C_INTERFACE(dev)  &dev->I2C
-#  endif
-#endif
-#ifdef SC16IS7XX_SPI_DEFINED
-#  ifdef USE_DYNAMIC_INTERFACE
-#    define GET_SPI_INTERFACE(dev)  dev->SPI
-#  else
-#    define GET_SPI_INTERFACE(dev)  &dev->SPI
-#  endif
+#ifdef USE_DYNAMIC_INTERFACE
+#  define GET_I2C_INTERFACE  pComp->I2C
+#  define GET_SPI_INTERFACE  pComp->SPI
+#else
+#  define GET_I2C_INTERFACE  &pComp->I2C
+#  define GET_SPI_INTERFACE  &pComp->SPI
 #endif
 
 //-----------------------------------------------------------------------------
@@ -54,6 +47,8 @@ extern "C" {
 static eERRORRESULT __SC16IS7XX_SetControlFlowConfiguration(SC16IS7XX_UART *pUART, SC16IS7XX_HardControlFlow *pHardFlow, SC16IS7XX_SoftControlFlow *pSoftFlow, bool useAdressChar);
 // DO NOT USE DIRECTLY, use SC16IS7XX_InitUART() instead! UART configuration needs to be configured with a safe UART configuration to avoid spurious effects, which is done in the SC16IS7XX_InitUART() function
 static eERRORRESULT __SC16IS7XX_SetUARTConfiguration(SC16IS7XX_UART *pUART, const SC16IS7XX_UARTconfig *pUARTConf);
+// DO NOT USE DIRECTLY, use SC16IS7XX_InitUART() instead! UART configuration needs to be configured with a safe UART configuration to avoid spurious effects, which is done in the SC16IS7XX_InitUART() function
+static eERRORRESULT __SC16IS7XX_ConfigureFIFOs(SC16IS7XX_UART *pUART, bool useFIFOs, eSC16IS7XX_TriggerCtrlLevel txTrigLvl, eSC16IS7XX_TriggerCtrlLevel rxTrigLvl);
 //-----------------------------------------------------------------------------
 #define SC16IS7XX_ABSOLUTE(value)  ( (value) < 0.0f ? -(value) : value )
 //-----------------------------------------------------------------------------
@@ -93,35 +88,43 @@ eERRORRESULT Init_SC16IS7XX(SC16IS7XX *pComp, const SC16IS7XX_Config *pConf)
 #ifdef SC16IS7XX_I2C_DEFINED
   if (pComp->Interface == SC16IS7XX_INTERFACE_I2C)
   {
-    if (pComp->fnI2C_Init == NULL) return ERR__PARAMETER_ERROR;
+    I2C_Interface* pI2C = GET_I2C_INTERFACE;
+#  if defined(CHECK_NULL_PARAM) && defined(USE_DYNAMIC_INTERFACE)
+    if (pI2C->fnI2C_Init == NULL) return ERR__PARAMETER_ERROR;
+#  endif
     if (pComp->InterfaceClockSpeed > SC16IS7XX_LIMITS[pComp->DevicePN].I2C_CLOCK_MAX) return ERR__I2C_CONFIG_ERROR;
-    Error = pComp->fnI2C_Init(pComp->InterfaceDevice, pComp->InterfaceClockSpeed);                        // Initialize the I2C interface
-    if (Error != ERR_OK) return Error;                                                                    // If there is an error while calling fnI2C_Init() then return the error
+    Error = pI2C->fnI2C_Init(pI2C, pComp->InterfaceClockSpeed);            // Initialize the I2C interface
+    if (Error != ERR_OK) return Error;                                     // If there is an error while calling fnI2C_Init() then return the error
+    if (SC16IS7XX_IsReady(pComp) == false) return ERR__NO_DEVICE_DETECTED; // No device detected
   }
 #endif
 #ifdef SC16IS7XX_SPI_DEFINED
   if (pComp->Interface == SC16IS7XX_INTERFACE_SPI)
   {
-    if (pComp->fnSPI_Init == NULL) return ERR__PARAMETER_ERROR;
-    if (pComp->InterfaceClockSpeed > SC16IS7XX_LIMITS[pComp->DevicePN].SPI_CLOCK_MAX) return ERR__I2C_CONFIG_ERROR;
-    Error = pComp->fnSPI_Init(pComp->InterfaceDevice, pComp->SPI_ChipSelect, pComp->InterfaceClockSpeed); // Initialize the SPI interface
-    if (Error != ERR_OK) return Error;                                                                    // If there is an error while calling fnSPI_Init() then return the error
+    SPI_Interface* pSPI = GET_SPI_INTERFACE;
+#  if defined(CHECK_NULL_PARAM) && defined(USE_DYNAMIC_INTERFACE)
+    if (pSPI->fnSPI_Init == NULL) return ERR__PARAMETER_ERROR;
+#  endif
+    if (pComp->InterfaceClockSpeed > SC16IS7XX_LIMITS[pComp->DevicePN].SPI_CLOCK_MAX) return ERR__SPI_CONFIG_ERROR;
+    Error = pSPI->fnSPI_Init(pSPI, pComp->SPIchipSelect, SPI_MODE0, pComp->InterfaceClockSpeed); // Initialize the SPI interface
+    if (Error != ERR_OK) return Error;                                     // If there is an error while calling fnSPI_Init() then return the error
   }
 #endif
 
   //--- Reset device ----------------------------------------
   Error = SC16IS7XX_SoftResetDevice(pComp);
-  if (Error != ERR_OK) return Error;                                                                      // If there is an error while calling SC16IS7XX_SoftResetDevice() then return the Error
+  if (Error != ERR_OK) return Error;                                       // If there is an error while calling SC16IS7XX_SoftResetDevice() then return the Error
 
   //--- Test SPI connection ---------------------------------
   Error = SC16IS7XX_HardwareCommTest(pComp);
-  if (Error != ERR_OK) return Error;                                                                      // If there is an error while calling SC16IS7XX_HardwareCommTest() then return the Error
+  if (Error == ERR__BAD_DATA) return ERR__NO_DEVICE_DETECTED;              // If there is a bad data error then the device is not detected
+  if (Error != ERR_OK) return Error;                                       // If there is an error while calling SC16IS7XX_HardwareCommTest() then return the Error
 
   //--- Configure GPIOs -------------------------------------
-  if (SC16IS7XX_LIMITS[pComp->DevicePN].HAVE_GPIO && (pConf != NULL))                                     // Only if device PN have GPIOs and a configuration is available
+  if (SC16IS7XX_LIMITS[pComp->DevicePN].HAVE_GPIO && (pConf != NULL))      // Only if device PN have GPIOs and a configuration is available
   {
     Error = SC16IS7XX_ConfigureGPIOs(pComp, pConf->StartupPinsDirection, pConf->StartupPinsLevel, pConf->PinsInterruptEnable);
-    if (Error != ERR_OK) return Error;                                                                    // If there is an error while calling SC16IS7XX_ConfigureGPIOs() then return the error
+    if (Error != ERR_OK) return Error;                                     // If there is an error while calling SC16IS7XX_ConfigureGPIOs() then return the error
   }
   return ERR_OK;
 }
@@ -149,18 +152,18 @@ eERRORRESULT SC16IS7XX_HardwareCommTest(SC16IS7XX *pComp)
   eERRORRESULT Error;
   uint8_t Value;
 
-  //--- Test SPI communication ---
+  //--- Test communication ---
   Error = SC16IS7XX_WriteRegister(pComp, SC16IS7XX_NO_CHANNEL, RegSC16IS7XX_SPR, 0x55);  // Write 0x55 to Scratchpad Register
   if (Error != ERR_OK) return Error;                                                     // If there is an error while calling SC16IS7XX_WriteRegister() then return the Error
   Error = SC16IS7XX_ReadRegister(pComp, SC16IS7XX_NO_CHANNEL, RegSC16IS7XX_SPR, &Value); // Read the Scratchpad Register
   if (Error != ERR_OK) return Error;                                                     // If there is an error while calling SC16IS7XX_ReadRegister() then return the Error
-  if (Value != 0x55) return ERR__SPI_COMM_ERROR;                                         // If the read back value is not the same as the one writen, return an error
+  if (Value != 0x55) return ERR__BAD_DATA;                                               // If the read back value is not the same as the one written, return an error
 
   Error = SC16IS7XX_WriteRegister(pComp, SC16IS7XX_NO_CHANNEL, RegSC16IS7XX_SPR, 0xAA);  // Write 0xAA to Scratchpad Register
   if (Error != ERR_OK) return Error;                                                     // If there is an error while calling SC16IS7XX_WriteRegister() then return the Error
   Error = SC16IS7XX_ReadRegister(pComp, SC16IS7XX_NO_CHANNEL, RegSC16IS7XX_SPR, &Value); // Read the Scratchpad Register
   if (Error != ERR_OK) return Error;                                                     // If there is an error while calling SC16IS7XX_ReadRegister() then return the Error
-  if (Value != 0xAA) return ERR__SPI_COMM_ERROR;                                         // If the read back value is not the same as the one writen, return an error
+  if (Value != 0xAA) return ERR__BAD_DATA;                                               // If the read back value is not the same as the one written, return an error
   return ERR_OK;
 }
 
@@ -182,7 +185,7 @@ bool SC16IS7XX_IsReady(SC16IS7XX *pComp)
 #if defined(CHECK_NULL_PARAM) && defined(USE_DYNAMIC_INTERFACE)
   if (pI2C->fnSPI_Transfer == NULL) return false;
 #endif
-  I2CInterface_Packet PacketDesc = I2C_INTERFACE_NO_DATA_DESC(pComp->I2Caddress & SC16IS7XX_I2C_WRITE);
+  I2CInterface_Packet PacketDesc = I2C_INTERFACE_NO_DATA_DESC(pComp->I2Caddress & I2C_WRITE_ANDMASK);
   return (pI2C->fnI2C_Transfer(pI2C, &PacketDesc) == ERR_OK); // Send only the chip address and get the Ack flag
 }
 #endif
@@ -210,17 +213,17 @@ eERRORRESULT SC16IS7XX_ReadData(SC16IS7XX *pComp, const eSC16IS7XX_Channel chann
 #if defined(CHECK_NULL_PARAM) && defined(USE_DYNAMIC_INTERFACE)
     if (pI2C->fnI2C_Transfer == NULL) return ERR__PARAMETER_ERROR;
 #endif
-    uint8_t ChipAddrW = ((pComp->I2Caddress & SC16IS7XX_CHIPADDRESS_MASK) & SC16IS7XX_I2C_WRITE);
-    uint8_t ChipAddrR = (ChipAddrW | SC16IS7XX_I2C_READ);
+    uint8_t ChipAddrW = ((pComp->I2Caddress & SC16IS7XX_CHIPADDRESS_MASK) & I2C_WRITE_ANDMASK);
+    uint8_t ChipAddrR = (ChipAddrW | I2C_READ_ORMASK);
 
     //--- Send the address ---
-    I2CInterface_Packet PacketDesc = I2C_INTERFACE_TX_DATA_DESC(ChipAddrW, true, &Address, sizeof(uint8_t), false, I2C_WRITE_THEN_READ_FIRST_PART);
-    Error = pI2C->fnI2C_Transfer(pI2C, &PacketDesc);   // Transfer the address
-    if (Error == ERR__I2C_NACK) return ERR__NOT_READY; // If the device receive a NAK, then the device is not ready
-    if (Error != ERR_OK) return Error;                 // If there is an error while calling fnI2C_Transfer() then return the Error
+    I2CInterface_Packet AddrPacketDesc = I2C_INTERFACE_TX_DATA_DESC(ChipAddrW, true, &Address, sizeof(uint8_t), false, I2C_WRITE_THEN_READ_FIRST_PART);
+    Error = pI2C->fnI2C_Transfer(pI2C, &AddrPacketDesc); // Transfer the address
+    if (Error == ERR__I2C_NACK) return ERR__NOT_READY;   // If the device receive a NAK, then the device is not ready
+    if (Error != ERR_OK) return Error;                   // If there is an error while calling fnI2C_Transfer() then return the Error
     //--- Get the data ---
-    PacketDesc = I2C_INTERFACE_TX_DATA_DESC(ChipAddrR, true, data, size, true, I2C_WRITE_THEN_READ_SECOND_PART);
-    Error = pI2C->fnI2C_Transfer(pI2C, &PacketDesc);   // Restart at first data read transfer, get the data and stop transfer at last byte
+    I2CInterface_Packet DataPacketDesc = I2C_INTERFACE_RX_DATA_DESC(ChipAddrR, true, data, size, true, I2C_WRITE_THEN_READ_SECOND_PART);
+    Error = pI2C->fnI2C_Transfer(pI2C, &DataPacketDesc); // Restart at first data read transfer, get the data and stop transfer at last byte
   }
 #endif
 #ifdef SC16IS7XX_SPI_DEFINED
@@ -233,12 +236,12 @@ eERRORRESULT SC16IS7XX_ReadData(SC16IS7XX *pComp, const eSC16IS7XX_Channel chann
     Address |= SC16IS7XX_SPI_READ;
 
     //--- Send the address ---
-    SPIInterface_Packet PacketDesc = SPI_INTERFACE_TX_DATA_DESC(&Address, sizeof(uint8_t), false); // Prepare SPI packet description to use
-    Error = pSPI->fnSPI_Transfer(pSPI, &PacketDesc);                                               // Transfer the address
-    if (Error != ERR_OK) return Error;                                                             // If there is an error while calling fnI2C_Transfer() then return the Error
+    SPIInterface_Packet AddrPacketDesc = SPI_INTERFACE_TX_DATA_DESC(&Address, sizeof(uint8_t), false);      // Prepare SPI packet description to use
+    Error = pSPI->fnSPI_Transfer(pSPI, &AddrPacketDesc);                                                    // Transfer the address
+    if (Error != ERR_OK) return Error;                                                                      // If there is an error while calling fnI2C_Transfer() then return the Error
     //--- Get the data ---
-    PacketDesc = SPI_INTERFACE_RX_DATA_WITH_DUMMYBYTE_DESC(0x00, data, size, true);                // Prepare SPI packet description to use
-    Error = pSPI->fnSPI_Transfer(pSPI, &PacketDesc);                                               // Get the data and stop transfer at last byte
+    SPIInterface_Packet DataPacketDesc = SPI_INTERFACE_RX_DATA_WITH_DUMMYBYTE_DESC(0x00, data, size, true); // Prepare SPI packet description to use
+    Error = pSPI->fnSPI_Transfer(pSPI, &DataPacketDesc);                                                    // Get the data and stop transfer at last byte
   }
 #endif
   return Error;
@@ -265,17 +268,17 @@ eERRORRESULT SC16IS7XX_WriteData(SC16IS7XX *pComp, const eSC16IS7XX_Channel chan
 #if defined(CHECK_NULL_PARAM) && defined(USE_DYNAMIC_INTERFACE)
     if (pI2C->fnI2C_Transfer == NULL) return ERR__PARAMETER_ERROR;
 #endif
-    uint8_t ChipAddrW = ((pComp->I2Caddress & SC16IS7XX_CHIPADDRESS_MASK) & SC16IS7XX_I2C_WRITE);
+    uint8_t ChipAddrW = ((pComp->I2Caddress & SC16IS7XX_CHIPADDRESS_MASK) & I2C_WRITE_ANDMASK);
 
     //--- Send the address ---
-    I2CInterface_Packet PacketDesc = I2C_INTERFACE_TX_DATA_DESC(ChipAddrW, true, &Address, sizeof(uint8_t), false, I2C_WRITE_THEN_READ_FIRST_PART);
-    Error = pI2C->fnI2C_Transfer(pI2C, &PacketDesc);                  // Transfer the address
+    I2CInterface_Packet AddrPacketDesc = I2C_INTERFACE_TX_DATA_DESC(ChipAddrW, true, &Address, sizeof(uint8_t), false, I2C_WRITE_THEN_WRITE_FIRST_PART);
+    Error = pI2C->fnI2C_Transfer(pI2C, &AddrPacketDesc);              // Transfer the address
     if (Error == ERR__I2C_NACK) return ERR__NOT_READY;                // If the device receive a NAK, then the device is not ready
     if (Error == ERR__I2C_NACK_DATA) return ERR__I2C_INVALID_ADDRESS; // If the device receive a NAK while transferring data, then this is an invalid address
     if (Error != ERR_OK) return Error;                                // If there is an error while calling fnI2C_Transfer() then return the Error
     //--- Send the data ---
-    PacketDesc = I2C_INTERFACE_TX_DATA_DESC(ChipAddrW, false, data, size, true, I2C_WRITE_THEN_READ_SECOND_PART);
-    Error = pI2C->fnI2C_Transfer(pI2C, &PacketDesc);                  // Continue by transfering the data, and stop transfer at last byte
+    I2CInterface_Packet DataPacketDesc = I2C_INTERFACE_TX_DATA_DESC(ChipAddrW, false, data, size, true, I2C_WRITE_THEN_WRITE_SECOND_PART);
+    Error = pI2C->fnI2C_Transfer(pI2C, &DataPacketDesc);              // Continue by transfering the data, and stop transfer at last byte
   }
 #endif
 #ifdef SC16IS7XX_SPI_DEFINED
@@ -286,12 +289,12 @@ eERRORRESULT SC16IS7XX_WriteData(SC16IS7XX *pComp, const eSC16IS7XX_Channel chan
     if (pSPI->fnSPI_Transfer == NULL) return ERR__PARAMETER_ERROR;
 #endif
     //--- Send the address ---
-    SPIInterface_Packet PacketDesc = SPI_INTERFACE_TX_DATA_DESC(&Address, sizeof(uint8_t), false);                       // Prepare SPI packet description to use
-    Error = pSPI->fnSPI_Transfer(pComp->InterfaceDevice, pComp->SPI_ChipSelect, &Address, NULL, sizeof(uint8_t), false); // Transfer the address
-    if (Error != ERR_OK) return Error;                                                                                   // If there is an error while calling fnI2C_Transfer() then return the Error
+    SPIInterface_Packet AddrPacketDesc = SPI_INTERFACE_TX_DATA_DESC(&Address, sizeof(uint8_t), false); // Prepare SPI packet description to use
+    Error = pSPI->fnSPI_Transfer(pSPI, &AddrPacketDesc);                                               // Transfer the address
+    if (Error != ERR_OK) return Error;                                                                 // If there is an error while calling fnI2C_Transfer() then return the Error
     //--- Send the data ---
-    PacketDesc = SPI_INTERFACE_TX_DATA_DESC(data, size, true);                                                           // Prepare SPI packet description to use
-    Error = pSPI->fnSPI_Transfer(pComp->InterfaceDevice, pComp->SPI_ChipSelect, data, NULL, size, true);                 // Send the data and stop transfer at last byte
+    SPIInterface_Packet DataPacketDesc = SPI_INTERFACE_TX_DATA_DESC(data, size, true);                 // Prepare SPI packet description to use
+    Error = pSPI->fnSPI_Transfer(pSPI, &DataPacketDesc);                                               // Send the data and stop transfer at last byte
   }
 #endif
   return Error;
@@ -318,7 +321,7 @@ eERRORRESULT SC16IS7XX_ModifyRegister(SC16IS7XX *pComp, const eSC16IS7XX_Channel
 //=============================================================================
 // Set register access of the SC16IS7XX
 //=============================================================================
-eERRORRESULT SC16IS7XX_SetRegisterAccess(SC16IS7XX *pComp, const eSC16IS7XX_Channel channel, uint8_t setAccessTo, uint8_t *originalLCRregValue)
+eERRORRESULT SC16IS7XX_SetRegisterAccess(SC16IS7XX *pComp, const eSC16IS7XX_Channel channel, eSC16IS7XX_AccessTo setAccessTo, uint8_t *originalLCRregValue)
 {
   eERRORRESULT Error;
   Error = SC16IS7XX_ReadRegister(pComp, channel, RegSC16IS7XX_LCR, originalLCRregValue); // Read the LCR register
@@ -331,10 +334,10 @@ eERRORRESULT SC16IS7XX_SetRegisterAccess(SC16IS7XX *pComp, const eSC16IS7XX_Chan
 //=============================================================================
 // Return access to general registers of the SC16IS7XX
 //=============================================================================
-eERRORRESULT SC16IS7XX_ReturnAccessToGeneralRegister(SC16IS7XX *pComp, const eSC16IS7XX_Channel channel, uint8_t *originalLCRregValue)
+eERRORRESULT SC16IS7XX_ReturnAccessToGeneralRegister(SC16IS7XX *pComp, const eSC16IS7XX_Channel channel, uint8_t originalLCRregValue)
 {
-  *originalLCRregValue &= SC16IS7XX_LCR_VALUE_SET_GENERAL_REGISTER;                       // Force access to general registers
-  return SC16IS7XX_WriteRegister(pComp, channel, RegSC16IS7XX_LCR, *originalLCRregValue); // Write the LCR register
+  originalLCRregValue &= SC16IS7XX_LCR_VALUE_SET_GENERAL_REGISTER;                       // Force access to general registers
+  return SC16IS7XX_WriteRegister(pComp, channel, RegSC16IS7XX_LCR, originalLCRregValue); // Write the LCR register
 }
 
 
@@ -352,18 +355,14 @@ eERRORRESULT SC16IS7XX_EnableEnhancedFunctions(SC16IS7XX *pComp, eSC16IS7XX_Chan
   //--- Enable access to enhanced registers ---
   SC16IS7XX_LCR_Register OriginalLCR;
   Error = SC16IS7XX_SetRegisterAccess(pComp, channel, SC16IS7XX_LCR_VALUE_SET_ENHANCED_FEATURE_REGISTER, &OriginalLCR.LCR);
-  if (Error != ERR_OK) return Error;                                                  // If there is an error while calling SC16IS7XX_SetRegisterAccess() then return the error
+  if (Error != ERR_OK) return Error;                                                // If there is an error while calling SC16IS7XX_SetRegisterAccess() then return the error
 
   //--- Enable Enhanced Functions ---
   Error = SC16IS7XX_ModifyRegister(pComp, channel, RegSC16IS7XX_EFR, SC16IS7XX_EFR_ENHANCED_FUNCTION_ENABLE, SC16IS7XX_EFR_ENHANCED_FUNCTION_Mask);
-  if (Error != ERR_OK) return Error;                                                  // If there is an error while calling SC16IS7XX_ReadRegister() then return the error
+  if (Error != ERR_OK) return Error;                                                // If there is an error while calling SC16IS7XX_ReadRegister() then return the error
 
   //--- Return access to general registers ---
-  Error = SC16IS7XX_ReturnAccessToGeneralRegister(pComp, channel, &OriginalLCR.LCR);  // Return access to general registers
-  if (Error != ERR_OK) return Error;                                                  // If there is an error while calling SC16IS7XX_ReturnAccessToGeneralRegister() then return the error
-
-  //--- Enable TCR and TLR ---
-  return SC16IS7XX_ModifyRegister(pComp, channel, RegSC16IS7XX_MCR, SC16IS7XX_MCR_TCR_AND_TLR_REGISTER_ENABLE, SC16IS7XX_MCR_TCR_AND_TLR_REGISTER_Mask);
+  return SC16IS7XX_ReturnAccessToGeneralRegister(pComp, channel, OriginalLCR.LCR); // Return access to general registers
 }
 
 
@@ -422,10 +421,11 @@ eERRORRESULT SC16IS7XX_SetGPIOPinsDirection(SC16IS7XX *pComp, const uint8_t pins
   if (pComp == NULL) return ERR__PARAMETER_ERROR;
 #endif
   if (SC16IS7XX_LIMITS[pComp->DevicePN].HAVE_GPIO == false) return ERR__NOT_SUPPORTED; // Only if the device have I/O pins
-  return SC16IS7XX_ModifyRegister(pComp, SC16IS7XX_NO_CHANNEL, RegSC16IS7XX_IODir, pinsDirection, pinsChangeMask);
+  return SC16IS7XX_ModifyRegister(pComp, SC16IS7XX_NO_CHANNEL, RegSC16IS7XX_IODir, ~pinsDirection, pinsChangeMask); // Invert pin direction to fit GPIO_Interface logic
 }
 
-eERRORRESULT SC16IS7XX_SetGPIOPinsDirection_Gen(GPIO_Interface *pIntDev, const uint32_t pinDirection, const uint32_t pinChangeMask)
+#ifdef USE_GENERICS_DEFINED
+eERRORRESULT SC16IS7XX_SetGPIOPinsDirection_Gen(GPIO_Interface *pIntDev, const uint32_t pinsDirection, const uint32_t pinsChangeMask)
 {
 #ifdef CHECK_NULL_PARAM
   if (pIntDev == NULL) return ERR__PARAMETER_ERROR;
@@ -433,6 +433,7 @@ eERRORRESULT SC16IS7XX_SetGPIOPinsDirection_Gen(GPIO_Interface *pIntDev, const u
   SC16IS7XX* pDevice = (SC16IS7XX*)(pIntDev->InterfaceDevice); // Get the SC16IS7XX device of this GPIO port
   return SC16IS7XX_SetGPIOPinsDirection(pDevice, (const uint8_t)pinsDirection, (const uint8_t)pinsChangeMask);
 }
+#endif
 
 
 
@@ -448,6 +449,7 @@ eERRORRESULT SC16IS7XX_GetGPIOPinsInputLevel(SC16IS7XX *pComp, uint8_t *pinsStat
   return SC16IS7XX_ReadRegister(pComp, SC16IS7XX_NO_CHANNEL, RegSC16IS7XX_IOState, pinsState); // Read the IOState register
 }
 
+#ifdef USE_GENERICS_DEFINED
 eERRORRESULT SC16IS7XX_GetGPIOPinsInputLevel_Gen(GPIO_Interface *pIntDev, uint32_t *pinsState)
 {
 #ifdef CHECK_NULL_PARAM
@@ -459,6 +461,7 @@ eERRORRESULT SC16IS7XX_GetGPIOPinsInputLevel_Gen(GPIO_Interface *pIntDev, uint32
   *pinsState = (uint32_t)PinValue;
   return Error;
 }
+#endif
 
 
 
@@ -477,7 +480,8 @@ eERRORRESULT SC16IS7XX_SetGPIOPinsOutputLevel(SC16IS7XX *pComp, const uint8_t pi
   return SC16IS7XX_WriteRegister(pComp, SC16IS7XX_NO_CHANNEL, RegSC16IS7XX_IOState, pComp->GPIOsOutState); // Write the IOState register
 }
 
-eERRORRESULT SC16IS7XX_SetGPIOPinsOutputLevel_Gen(GPIO_Interface *pIntDev, const uint32_t pinLevel, const uint32_t pinChangeMask)
+#ifdef USE_GENERICS_DEFINED
+eERRORRESULT SC16IS7XX_SetGPIOPinsOutputLevel_Gen(GPIO_Interface *pIntDev, const uint32_t pinsLevel, const uint32_t pinsChangeMask)
 {
 #ifdef CHECK_NULL_PARAM
   if (pIntDev == NULL) return ERR__PARAMETER_ERROR;
@@ -485,6 +489,7 @@ eERRORRESULT SC16IS7XX_SetGPIOPinsOutputLevel_Gen(GPIO_Interface *pIntDev, const
   SC16IS7XX* pDevice = (SC16IS7XX*)(pIntDev->InterfaceDevice); // Get the SC16IS7XX device of this GPIO port
   return SC16IS7XX_SetGPIOPinsOutputLevel(pDevice, (const uint8_t)pinsLevel, (const uint8_t)pinsChangeMask);
 }
+#endif
 
 
 
@@ -528,6 +533,10 @@ eERRORRESULT SC16IS7XX_InitUART(SC16IS7XX_UART *pUART, const SC16IS7XX_UARTconfi
   Error = SC16IS7XX_EnableEnhancedFunctions(pComp, pUART->Channel);    // Enable the enhanced function of the UART channel
   if (Error != ERR_OK) return Error;                                   // If there is an error while calling SC16IS7XX_EnableEnhancedFunctions() then return the error
 
+  //--- Enable TCR and TLR ---
+  Error = SC16IS7XX_ModifyRegister(pComp, pUART->Channel, RegSC16IS7XX_MCR, SC16IS7XX_MCR_TCR_AND_TLR_REGISTER_ENABLE, SC16IS7XX_MCR_TCR_AND_TLR_REGISTER_Mask);
+  if (Error != ERR_OK) return Error;                                   // If there is an error while calling SC16IS7XX_ModifyRegister() then return the error
+
   //--- Disable Interrupts, Tx, Rx and clear FIFOs ----------
   SC16IS7XX_IER_Register OriginalIER;
   Error = SC16IS7XX_ReadRegister(pComp, pUART->Channel, RegSC16IS7XX_IER, &OriginalIER.IER); // Read and save configuration of the IER register
@@ -552,8 +561,8 @@ eERRORRESULT SC16IS7XX_InitUART(SC16IS7XX_UART *pUART, const SC16IS7XX_UARTconfi
   if (Error != ERR_OK) return Error;                                   // If there is an error while calling SC16IS7XX_SetUARTBaudRate() then return the error
 
   //--- Set FIFO configuration ------------------------------
-  Error = SC16IS7XX_ConfigureFIFOs(pUART, pUARTConf->UseFIFOs, pUARTConf->TxTrigLvl, pUARTConf->RxTrigLvl); // Configure FIFOs
-  if (Error != ERR_OK) return Error;                                   // If there is an error while calling SC16IS7XX_ConfigureFIFOs() then return the error
+  Error = __SC16IS7XX_ConfigureFIFOs(pUART, pUARTConf->UseFIFOs, pUARTConf->TxTrigLvl, pUARTConf->RxTrigLvl); // Configure FIFOs
+  if (Error != ERR_OK) return Error;                                   // If there is an error while calling __SC16IS7XX_ConfigureFIFOs() then return the error
 
   //--- Return to original interrupt configuration ----------
   Error = SC16IS7XX_WriteRegister(pComp, pUART->Channel, RegSC16IS7XX_IER, OriginalIER.IER); // Re-enable previous interrupts with the sleep state if previously set
@@ -594,7 +603,11 @@ eERRORRESULT SC16IS7XX_InitUART(SC16IS7XX_UART *pUART, const SC16IS7XX_UARTconfi
       break;
     default: break;
   }
-  return __SC16IS7XX_SetControlFlowConfiguration(pUART, pHardFlow, pSoftFlow, UseAddressChar); // Configure the control flow
+  Error = __SC16IS7XX_SetControlFlowConfiguration(pUART, pHardFlow, pSoftFlow, UseAddressChar); // Configure the control flow
+  if (Error != ERR_OK) return Error;                                   // If there is an error while calling __SC16IS7XX_SetControlFlowConfiguration() then return the error
+  
+  //--- Disable TCR and TLR ---
+  return SC16IS7XX_ModifyRegister(pComp, pUART->Channel, RegSC16IS7XX_MCR, SC16IS7XX_MCR_TCR_AND_TLR_REGISTER_DISABLE, SC16IS7XX_MCR_TCR_AND_TLR_REGISTER_Mask);
 }
 
 
@@ -649,7 +662,7 @@ eERRORRESULT SC16IS7XX_UARTCommTest(SC16IS7XX_UART *pUART)
 
 
 //=============================================================================
-// Set UART configuration of the SC16IS7XX
+// [STATIC] Set UART configuration of the SC16IS7XX
 //=============================================================================
 // DO NOT USE DIRECTLY, use SC16IS7XX_InitUART() instead! UART configuration needs to be configured with a safe UART configuration to avoid spurious effects, which is done in the SC16IS7XX_InitUART() function
 eERRORRESULT __SC16IS7XX_SetUARTConfiguration(SC16IS7XX_UART *pUART, const SC16IS7XX_UARTconfig *pUARTConf)
@@ -722,7 +735,7 @@ eERRORRESULT __SC16IS7XX_SetUARTConfiguration(SC16IS7XX_UART *pUART, const SC16I
           Error = SC16IS7XX_WriteRegister(pComp, pUART->Channel, RegSC16IS7XX_XOFF2, pUARTConf->RS485.AddressChar); // Write the Address char in Xoff2 register
           if (Error != ERR_OK) ErrorReturn = Error;                                                                 // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
           //--- Return access to general registers ---
-          Error = SC16IS7XX_ReturnAccessToGeneralRegister(pComp, pUART->Channel, &OriginalLCR.LCR);                 // Return access to general registers
+          Error = SC16IS7XX_ReturnAccessToGeneralRegister(pComp, pUART->Channel, OriginalLCR.LCR);                  // Return access to general registers
           if (ErrorReturn != ERR_OK) return ErrorReturn;                                                            // If there is an error while Enhanced Features are enabled then return the error
           if (Error != ERR_OK) return Error;                                                                        // If there is an error while calling SC16IS7XX_ReturnAccessToGeneralRegister() then return the error
           break;
@@ -817,13 +830,13 @@ eERRORRESULT SC16IS7XX_SetUARTBaudRate(SC16IS7XX_UART *pUART, const SC16IS7XX_UA
   }
 
   //--- Calculate Divisor with Prescaler = 1 and its error ---
-  uint32_t DivisorPrescaler1 = (uint32_t)(((float)CompFreq / (float)pUARTConf->UARTbaudrate * 16.0f * 1.0f) + 0.5f);            // (ComponentXtalFreq/1)/(DesiredBaudRate*16)+0.5 for rounding
+  uint32_t DivisorPrescaler1 = (uint32_t)(((float)CompFreq / ((float)pUARTConf->UARTbaudrate * 16.0f * 1.0f)) + 0.5f);          // (ComponentXtalFreq/1)/(DesiredBaudRate*16)+0.5 for rounding
   if (DivisorPrescaler1 < 0x0001) DivisorPrescaler1 =     1;                                                                    // Cannot be < 1
   if (DivisorPrescaler1 > 0xFFFF) DivisorPrescaler1 = 65535;                                                                    // Cannot be > 65535
   float BaudRatePrescaler1 = (float)CompFreq / ((float)DivisorPrescaler1 * 16.0f * 1.0f);                                       // Get actual baudrate with prescaler set to 1
   float ErrorPrescaler1    = ((BaudRatePrescaler1 - (float)pUARTConf->UARTbaudrate) * 100000) / (float)pUARTConf->UARTbaudrate; // Calculate error with prescaler set to 1
   //--- Calculate Divisor with Prescaler = 4 and its error ---
-  uint32_t DivisorPrescaler4 = (uint32_t)(((float)CompFreq / (float)pUARTConf->UARTbaudrate * 16.0f * 4.0f) + 0.5f);            // (ComponentXtalFreq/4)/(DesiredBaudRate*16)+0.5 for rounding
+  uint32_t DivisorPrescaler4 = (uint32_t)(((float)CompFreq / ((float)pUARTConf->UARTbaudrate * 16.0f * 4.0f)) + 0.5f);          // (ComponentXtalFreq/4)/(DesiredBaudRate*16)+0.5 for rounding
   if (DivisorPrescaler4 < 0x0001) DivisorPrescaler4 =     1;                                                                    // Cannot be < 1
   if (DivisorPrescaler4 > 0xFFFF) DivisorPrescaler4 = 65535;                                                                    // Cannot be > 65535
   float BaudRatePrescaler4 = (float)CompFreq / ((float)DivisorPrescaler4 * 16.0f * 4.0f);                                       // Get actual baudrate with prescaler set to 4
@@ -858,13 +871,13 @@ eERRORRESULT SC16IS7XX_SetUARTBaudRate(SC16IS7XX_UART *pUART, const SC16IS7XX_UA
   if (Error != ERR_OK) return Error;                                                                        // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
 
   //--- Return access to general registers ---
-  return SC16IS7XX_ReturnAccessToGeneralRegister(pComp, pUART->Channel, &OriginalLCR.LCR); // Return access to general registers
+  return SC16IS7XX_ReturnAccessToGeneralRegister(pComp, pUART->Channel, OriginalLCR.LCR); // Return access to general registers
 }
 
 
 
 //=============================================================================
-// Configure an UART Control Flow of the SC16IS7XX
+// [STATIC] Configure an UART Control Flow of the SC16IS7XX
 //=============================================================================
 // DO NOT USE DIRECTLY, use SC16IS7XX_InitUART() instead! Control Flow needs to be configured with a safe UART configuration to avoid spurious effects, which is done in the SC16IS7XX_InitUART() function
 eERRORRESULT __SC16IS7XX_SetControlFlowConfiguration(SC16IS7XX_UART *pUART, SC16IS7XX_HardControlFlow *pHardFlow, SC16IS7XX_SoftControlFlow *pSoftFlow, bool useAdressChar)
@@ -937,14 +950,14 @@ eERRORRESULT __SC16IS7XX_SetControlFlowConfiguration(SC16IS7XX_UART *pUART, SC16
       if (Error != ERR_OK) ErrorReturn = Error;                                                                // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
       if (pSoftFlow->UseSpecialCharOnXoff2) RegEFR.EFR |= SC16IS7XX_EFR_SPECIAL_CHAR_DETECT_ENABLE;
     }
-    Error = SC16IS7XX_WriteRegister(pComp, pUART->Channel, RegSC16IS7XX_EFR, RegEFR.EFR);   // Write the EFR register
-    if (Error != ERR_OK) ErrorReturn = Error;                                               // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
+    Error = SC16IS7XX_WriteRegister(pComp, pUART->Channel, RegSC16IS7XX_EFR, RegEFR.EFR);  // Write the EFR register
+    if (Error != ERR_OK) ErrorReturn = Error;                                              // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
   }
 
   //--- Return access to general registers ---
-  Error = SC16IS7XX_ReturnAccessToGeneralRegister(pComp, pUART->Channel, &OriginalLCR.LCR); // Return access to general registers
-  if (ErrorReturn != ERR_OK) return ErrorReturn;                                            // If there is an error while Enhanced Features are enabled then return the error
-  if (Error != ERR_OK) return Error;                                                        // If there is an error while calling SC16IS7XX_ReturnAccessToGeneralRegister() then return the error
+  Error = SC16IS7XX_ReturnAccessToGeneralRegister(pComp, pUART->Channel, OriginalLCR.LCR); // Return access to general registers
+  if (ErrorReturn != ERR_OK) return ErrorReturn;                                           // If there is an error while Enhanced Features are enabled then return the error
+  if (Error != ERR_OK) return Error;                                                       // If there is an error while calling SC16IS7XX_ReturnAccessToGeneralRegister() then return the error
 
   //--- Set Xon Any if set ---
   uint8_t RegValue = 0;
@@ -958,9 +971,10 @@ eERRORRESULT __SC16IS7XX_SetControlFlowConfiguration(SC16IS7XX_UART *pUART, SC16
 
 //**********************************************************************************************************************************************************
 //=============================================================================
-// Configure interrupt of the SC16IS7XX device
+// [STATIC] Configure interrupt of the SC16IS7XX device
 //=============================================================================
-eERRORRESULT SC16IS7XX_ConfigureFIFOs(SC16IS7XX_UART *pUART, bool useFIFOs, eSC16IS7XX_TriggerCtrlLevel txTrigLvl, eSC16IS7XX_TriggerCtrlLevel rxTrigLvl)
+// DO NOT USE DIRECTLY, use SC16IS7XX_InitUART() instead! UART configuration needs to be configured with a safe UART configuration to avoid spurious effects, which is done in the SC16IS7XX_InitUART() function
+eERRORRESULT __SC16IS7XX_ConfigureFIFOs(SC16IS7XX_UART *pUART, bool useFIFOs, eSC16IS7XX_TriggerCtrlLevel txTrigLvl, eSC16IS7XX_TriggerCtrlLevel rxTrigLvl)
 {
 #ifdef CHECK_NULL_PARAM
   if (pUART == NULL) return ERR__PARAMETER_ERROR;
@@ -1125,10 +1139,10 @@ eERRORRESULT SC16IS7XX_GetDataCountRxFIFO(SC16IS7XX_UART *pUART, uint8_t *dataCo
 //=============================================================================
 // Try to transmit data to UART FIFO of the SC16IS7XX
 //=============================================================================
-eERRORRESULT SC16IS7XX_TryTransmitData(SC16IS7XX_UART *pUART, uint8_t *data, size_t count, size_t *actuallySent)
+eERRORRESULT SC16IS7XX_TryTransmitData(SC16IS7XX_UART *pUART, uint8_t *data, size_t size, size_t *actuallySent)
 {
 #ifdef CHECK_NULL_PARAM
-  if (pUART == NULL) return ERR__PARAMETER_ERROR;
+  if ((pUART == NULL) || (actuallySent == NULL)) return ERR__PARAMETER_ERROR;
 #endif
   SC16IS7XX* pComp = pUART->Device; // Get the SC16IS7XX device of this UART
 #ifdef CHECK_NULL_PARAM
@@ -1145,23 +1159,34 @@ eERRORRESULT SC16IS7XX_TryTransmitData(SC16IS7XX_UART *pUART, uint8_t *data, siz
   if ((pUART->DriverConfig & SC16IS7XX_DRIVER_SAFE_TX) > 0)          //*** Safe transmit
   {
     *actuallySent = 0;
-    size_t CountToSend = (count > (size_t)AvailableSpace ? AvailableSpace : (size_t)count);
+    size_t CountToSend = (size > (size_t)AvailableSpace ? (size_t)AvailableSpace : size);
     while (CountToSend > 0)
     {
       Error = SC16IS7XX_WriteRegister(pComp, pUART->Channel, RegSC16IS7XX_THR, *data);
       if (Error != ERR_OK) return Error;                             // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
-      (*actuallySent)++;
-      data++;
-      CountToSend--;
+      ++(*actuallySent);
+      ++data;
+      --CountToSend;
     }
   }
   else                                                               //*** Burst transmit
   {
-    *actuallySent = (count > AvailableSpace ? AvailableSpace : count);                        // Set how many data will be actually sent
+    *actuallySent = (size > (size_t)AvailableSpace ? (size_t)AvailableSpace : size);          // Set how many data will be actually sent
     return SC16IS7XX_WriteData(pComp, pUART->Channel, RegSC16IS7XX_THR, data, *actuallySent); // Send all possible data at once
   }
   return ERR_OK;
 }
+
+#ifdef USE_GENERICS_DEFINED
+eERRORRESULT SC16IS7XX_TryTransmitData_Gen(UART_Interface *pIntDev, uint8_t *data, size_t size, size_t *actuallySent)
+{
+#ifdef CHECK_NULL_PARAM
+  if (pIntDev == NULL) return ERR__PARAMETER_ERROR;
+#endif
+  SC16IS7XX_UART* pUART = (SC16IS7XX_UART*)(pIntDev->InterfaceDevice); // Get the SC16IS7XX_UART device of this UART port
+  return SC16IS7XX_TryTransmitData(pUART, data, size, actuallySent);
+}
+#endif
 
 
 
@@ -1186,10 +1211,10 @@ eERRORRESULT SC16IS7XX_TransmitChar(SC16IS7XX_UART *pUART, const uint8_t data)
 //=============================================================================
 // Receive available data from UART FIFO of the SC16IS7XX
 //=============================================================================
-eERRORRESULT SC16IS7XX_ReceiveData(SC16IS7XX_UART *pUART, uint8_t *data, size_t *actuallyReceived, setSC16IS7XX_ReceiveError *lastCharError)
+eERRORRESULT SC16IS7XX_ReceiveData(SC16IS7XX_UART *pUART, uint8_t *data, size_t size, size_t *actuallyReceived, setSC16IS7XX_ReceiveError *lastCharError)
 {
 #ifdef CHECK_NULL_PARAM
-  if (pUART == NULL) return ERR__PARAMETER_ERROR;
+  if ((pUART == NULL) || (data == NULL) || (actuallyReceived == NULL) || (lastCharError == NULL)) return ERR__PARAMETER_ERROR;
 #endif
   SC16IS7XX* pComp = pUART->Device; // Get the SC16IS7XX device of this UART
 #ifdef CHECK_NULL_PARAM
@@ -1207,7 +1232,7 @@ eERRORRESULT SC16IS7XX_ReceiveData(SC16IS7XX_UART *pUART, uint8_t *data, size_t 
   if ((pUART->DriverConfig & SC16IS7XX_DRIVER_SAFE_RX) > 0)                                        //*** Safe receive
   {
     *actuallyReceived = 0;
-    size_t CountToGet = (size_t)AvailableData;
+    size_t CountToGet = (size > (size_t)AvailableData ? (size_t)AvailableData : size);
     while (CountToGet > 0)
     {
       //--- Verify current char ---
@@ -1224,11 +1249,22 @@ eERRORRESULT SC16IS7XX_ReceiveData(SC16IS7XX_UART *pUART, uint8_t *data, size_t 
   }
   else                                                                                           //*** Burst receive
   {
-    *actuallyReceived = (size_t)AvailableData;                                                   // Set how many data will be actually received
+    *actuallyReceived = (size > (size_t)AvailableData ? (size_t)AvailableData : size);           // Set how many data will be actually received
     return SC16IS7XX_ReadData(pComp, pUART->Channel, RegSC16IS7XX_RHR, data, *actuallyReceived); // Receive all possible data at once
   }
   return ERR_OK;
 }
+
+#ifdef USE_GENERICS_DEFINED
+eERRORRESULT SC16IS7XX_ReceiveData_Gen(UART_Interface *pIntDev, uint8_t *data, size_t size, size_t *actuallyReceived, setSC16IS7XX_ReceiveError *lastCharError)
+{
+#ifdef CHECK_NULL_PARAM
+  if (pIntDev == NULL) return ERR__PARAMETER_ERROR;
+#endif
+  SC16IS7XX_UART* pUART = (SC16IS7XX_UART*)(pIntDev->InterfaceDevice); // Get the SC16IS7XX_UART device of this UART port
+  return SC16IS7XX_ReceiveData(pUART, data, size, actuallyReceived, lastCharError);
+}
+#endif
 
 
 
@@ -1241,7 +1277,7 @@ eERRORRESULT SC16IS7XX_ReceiveChar(SC16IS7XX_UART *pUART, uint8_t *data, setSC16
   size_t ActuallyReceived = 0;
   do 
   {
-    Error = SC16IS7XX_ReceiveData(pUART, data, &ActuallyReceived, charError);
+    Error = SC16IS7XX_ReceiveData(pUART, data, 1, &ActuallyReceived, charError);
     if (Error != ERR_OK) return Error; // If there is an error while calling SC16IS7XX_ReceiveData() then return the error
   } while (ActuallyReceived == 0);
   return ERR_OK;
