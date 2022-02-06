@@ -127,7 +127,7 @@ struct SC16IS7XX_UART UART_Chan0_EXT1 = // SC16IS7XX UART
 {
   //--- Device configuration ---
   .InterfaceDevice = UART0_EXT1, // Shall be a SC16IS7XX_UART device
-  .fnUART_Transmit = SC16IS7XX_TryTransmitData_Gen,
+  .fnUART_Transmit = SC16IS7XX_TransmitData_Gen,
   .fnUART_Receive  = SC16IS7XX_ReceiveData_Gen,
   //--- I2C configuration ---
   .Channel         = 0,
@@ -141,9 +141,9 @@ SC16IS7XX_UARTconfig UART0_EXT1_RS232config =
 {
   //--- UART configuration ---
   .UARTtype           = SC16IS7XX_UART_RS232,        // Type of the UART: RS232
+  .UARTwordLen        = SC16IS7XX_DATA_LENGTH_8bits, // UART data length 8 bits
   .UARTparity         = SC16IS7XX_NO_PARITY,         // No UART parity
   .UARTstopBit        = SC16IS7XX_STOP_BIT_1bit,     // UART 1-bit stop length
-  .UARTwordLen        = SC16IS7XX_DATA_LENGTH_8bits, // UART data length 8 bits
   .UARTbaudrate       = 115200,                      // UART desired baudrate 115200 bauds
   .UARTbaudrateError  = &Baudrate_UART0_Ext1,
   .RS232 =
@@ -155,8 +155,11 @@ SC16IS7XX_UARTconfig UART0_EXT1_RS232config =
 
   //--- FIFO configuration ---
   .UseFIFOs           = true,                        // Enable FIFO at startup
-  .TxTrigLvl          = SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_48_CHAR, //!< FIFO Tx trigger level used for interrupt generation
-  .RxTrigLvl          = SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_0_CHAR,  //!< FIFO Rx trigger level used for interrupt generation
+  .TxTrigLvl          = SC16IS7XX_TX_FIFO_TRIGGER_AT_16_CHAR_SPACE,    // FIFO Tx trigger level used for interrupt generation
+  .RxTrigLvl          = SC16IS7XX_RX_FIFO_TRIGGER_AT_4_CHAR_AVAILABLE, // FIFO Rx trigger level used for interrupt generation
+
+  //--- Interrupt configuration ---
+  .Interrupts         = SC16IS7XX_RX_FIFO_INTERRUPT | SC16IS7XX_TX_FIFO_INTERRUPT, // Interrupt configuration of the UART
 };
 
 //-----------------------------------------------------------------------------
@@ -218,7 +221,7 @@ struct SC16IS7XX_UART UART_Chan0_I2C = // SC16IS7XX UART
 {
   //--- Device configuration ---
   .InterfaceDevice = UART0_I2C, // Shall be a SC16IS7XX_UART device
-  .fnUART_Transmit = SC16IS7XX_TryTransmitData_Gen,
+  .fnUART_Transmit = SC16IS7XX_TransmitData_Gen,
   .fnUART_Receive  = SC16IS7XX_ReceiveData_Gen,
   //--- I2C configuration ---
   .Channel         = 0,
@@ -232,9 +235,9 @@ SC16IS7XX_UARTconfig UART0_I2C_RS232config =
 {
   //--- UART configuration ---
   .UARTtype           = SC16IS7XX_UART_RS232,        // Type of the UART: RS232
+  .UARTwordLen        = SC16IS7XX_DATA_LENGTH_8bits, // UART data length 8 bits
   .UARTparity         = SC16IS7XX_NO_PARITY,         // No UART parity
   .UARTstopBit        = SC16IS7XX_STOP_BIT_1bit,     // UART 1-bit stop length
-  .UARTwordLen        = SC16IS7XX_DATA_LENGTH_8bits, // UART data length 8 bits
   .UARTbaudrate       = 115200,                      // UART desired baudrate 115200 bauds
   .UARTbaudrateError  = &Baudrate_UART0_I2C,
   .RS232 =
@@ -246,8 +249,11 @@ SC16IS7XX_UARTconfig UART0_I2C_RS232config =
 
   //--- FIFO configuration ---
   .UseFIFOs           = true,                        // Enable FIFO at startup
-  .TxTrigLvl          = SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_48_CHAR, //!< FIFO Tx trigger level used for interrupt generation
-  .RxTrigLvl          = SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_0_CHAR,  //!< FIFO Rx trigger level used for interrupt generation
+  .TxTrigLvl          = SC16IS7XX_TX_FIFO_TRIGGER_AT_48_CHAR_SPACE,    // FIFO Tx trigger level used for interrupt generation
+  .RxTrigLvl          = SC16IS7XX_RX_FIFO_TRIGGER_AT_4_CHAR_AVAILABLE, // FIFO Rx trigger level used for interrupt generation
+
+  //--- Interrupt configuration ---
+  .Interrupts         = SC16IS7XX_RX_FIFO_INTERRUPT | SC16IS7XX_TX_FIFO_INTERRUPT, // Interrupt configuration of the UART
 };
 
 //-----------------------------------------------------------------------------
@@ -299,7 +305,7 @@ struct SC16IS7XX_UART UART_Chan0_EXT2 = // SC16IS7XX UART
 {
   //--- UART configuration ---
   .Channel        = SC16IS7XX_CHANNEL_A,
-  .DriverConfig   = SC16IS7XX_DRIVER_SAFE_TX | SC16IS7XX_DRIVER_SAFE_RX,
+  .DriverConfig   = SC16IS7XX_DRIVER_BURST_TX | SC16IS7XX_DRIVER_BURST_RX,//SC16IS7XX_DRIVER_SAFE_TX | SC16IS7XX_DRIVER_SAFE_RX,
   //--- Device configuration ---
   .UserDriverData = NULL,
   .Device         = SC16IS752_EXT2,
@@ -309,7 +315,7 @@ struct SC16IS7XX_UART UART_Chan0_EXT2 = // SC16IS7XX UART
 {
   //--- Device configuration ---
   .InterfaceDevice = UART0_EXT2, // Shall be a SC16IS7XX_UART device
-  .fnUART_Transmit = SC16IS7XX_TryTransmitData_Gen,
+  .fnUART_Transmit = SC16IS7XX_TransmitData_Gen,
   .fnUART_Receive  = SC16IS7XX_ReceiveData_Gen,
   //--- I2C configuration ---
   .Channel         = 0,
@@ -322,7 +328,7 @@ struct SC16IS7XX_UART UART_Chan1_EXT2 = // SC16IS7XX UART
 {
   //--- UART configuration ---
   .Channel        = SC16IS7XX_CHANNEL_B,
-  .DriverConfig   = SC16IS7XX_DRIVER_SAFE_TX | SC16IS7XX_DRIVER_SAFE_RX,
+  .DriverConfig   = SC16IS7XX_DRIVER_BURST_TX | SC16IS7XX_DRIVER_BURST_RX,//SC16IS7XX_DRIVER_SAFE_TX | SC16IS7XX_DRIVER_SAFE_RX,
   //--- Device configuration ---
   .UserDriverData = NULL,
   .Device         = SC16IS752_EXT2,
@@ -332,7 +338,7 @@ struct SC16IS7XX_UART UART_Chan1_EXT2 = // SC16IS7XX UART
 {
   //--- Device configuration ---
   .InterfaceDevice = UART1_EXT2, // Shall be a SC16IS7XX_UART device
-  .fnUART_Transmit = SC16IS7XX_TryTransmitData_Gen,
+  .fnUART_Transmit = SC16IS7XX_TransmitData_Gen,
   .fnUART_Receive  = SC16IS7XX_ReceiveData_Gen,
   //--- I2C configuration ---
   .Channel         = 1,
@@ -346,9 +352,9 @@ SC16IS7XX_UARTconfig UART_EXT2_RS232config =
 {
   //--- UART configuration ---
   .UARTtype           = SC16IS7XX_UART_RS232,        // Type of the UART: RS232
+  .UARTwordLen        = SC16IS7XX_DATA_LENGTH_8bits, // UART data length 8 bits
   .UARTparity         = SC16IS7XX_NO_PARITY,         // No UART parity
   .UARTstopBit        = SC16IS7XX_STOP_BIT_1bit,     // UART 1-bit stop length
-  .UARTwordLen        = SC16IS7XX_DATA_LENGTH_8bits, // UART data length 8 bits
   .UARTbaudrate       = 115200,                      // UART desired baudrate 115200 bauds
   .UARTbaudrateError  = &Baudrate_UART_Ext2,
   .RS232 =
@@ -360,8 +366,11 @@ SC16IS7XX_UARTconfig UART_EXT2_RS232config =
 
   //--- FIFO configuration ---
   .UseFIFOs           = true,                        // Enable FIFO at startup
-  .TxTrigLvl          = SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_48_CHAR, //!< FIFO Tx trigger level used for interrupt generation
-  .RxTrigLvl          = SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_0_CHAR,  //!< FIFO Rx trigger level used for interrupt generation
+  .TxTrigLvl          = SC16IS7XX_TX_FIFO_TRIGGER_AT_16_CHAR_SPACE,    // FIFO Tx trigger level used for interrupt generation
+  .RxTrigLvl          = SC16IS7XX_RX_FIFO_TRIGGER_AT_4_CHAR_AVAILABLE, // FIFO Rx trigger level used for interrupt generation
+
+  //--- Interrupt configuration ---
+  .Interrupts         = SC16IS7XX_RX_FIFO_INTERRUPT | SC16IS7XX_TX_FIFO_INTERRUPT, // Interrupt configuration of the UART
 };
 
 //-----------------------------------------------------------------------------

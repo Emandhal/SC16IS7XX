@@ -18,7 +18,7 @@
  ******************************************************************************/
 /* @page License
  *
- * Copyright (c) 2020-22 Fabien MAILLY
+ * Copyright (c) 2020-2022 Fabien MAILLY
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -180,6 +180,8 @@ typedef struct SC16IS7XX_Limits
 
 
 
+
+
 //********************************************************************************************************************
 // SC16IS7XX Register list
 //********************************************************************************************************************
@@ -224,7 +226,7 @@ typedef enum
 //! SC16IS7XX registers list
 typedef enum
 {
-  SC16IS7XX_LCR_VALUE_SET_SPECIAL_REGISTER          = 0xC0,         //! Special value of LCR register to access Special Registers (note "The special register set is accessible only when LCR[7] = 1 and not 0xBF" of Table 10 in the datasheet)
+  SC16IS7XX_LCR_VALUE_SET_SPECIAL_REGISTER          = 0x80,         //! Special value of LCR register to access Special Registers (note "The special register set is accessible only when LCR[7] = 1 and not 0xBF" of Table 10 in the datasheet)
   SC16IS7XX_LCR_VALUE_SET_ENHANCED_FEATURE_REGISTER = 0xBF,         //! Special value of LCR register to access Special Registers (note "Enhanced Feature Registers are only accessible when LCR = 0xBF" of Table 10 in the datasheet)
   SC16IS7XX_LCR_VALUE_SET_GENERAL_REGISTER          = ~(0x1u << 7), //!< Special value of LCR[7] register to access General Registers (note "These registers are accessible only when LCR[7] = 0" of Table 10 in the datasheet)
 } eSC16IS7XX_AccessTo;
@@ -369,8 +371,9 @@ typedef union __SC16IS7XX_PACKED__ SC16IS7XX_IIR_Register
 SC16IS7XX_UNPACKITEM
 SC16IS7XX_CONTROL_ITEM_SIZE(SC16IS7XX_IIR_Register, 1);
 
-#define SC16IS7XX_IIR_NO_INTERRUPT_PENDING  (0x1u << 0) //!< No interrupt is pending
-#define SC16IS7XX_IIR_INTERRUPT_PENDING     (0x0u << 0) //!< An interrupt is pending
+#define SC16IS7XX_IIR_NO_INTERRUPT_PENDING    (0x1u << 0) //!< No interrupt is pending
+#define SC16IS7XX_IIR_INTERRUPT_PENDING       (0x0u << 0) //!< An interrupt is pending
+#define SC16IS7XX_IIR_INTERRUPT_PENDING_Mask  (0x1u << 0) //!< Interrupt is pending mask
 
 //! 5-bit encoded interrupt source for the IIR register
 typedef enum
@@ -547,7 +550,7 @@ SC16IS7XX_CONTROL_ITEM_SIZE(SC16IS7XX_LSR_Register, 1);
 
 #define SC16IS7XX_LSR_DATA_RECEIVE_ERROR_Mask  ( SC16IS7XX_LSR_FIFO_DATA_ERROR | SC16IS7XX_LSR_BREAK_CONDITION_OCCUR | SC16IS7XX_LSR_FRAMING_ERROR | SC16IS7XX_LSR_PARITY_ERROR | SC16IS7XX_LSR_OVERRUN_ERROR ) //!< At least one parity error, framing error, overrun, or break indication is in the receiver FIFO
 
-// Driver configuration enum
+// Data receive error enum
 typedef enum
 {
   SC16IS7XX_NO_RX_ERROR   = 0x00,                                //!< No error on the last character received
@@ -555,7 +558,7 @@ typedef enum
   SC16IS7XX_PARITY_ERROR  = SC16IS7XX_LSR_PARITY_ERROR,          //!< Parity error in data being read from RX FIFO
   SC16IS7XX_FRAMING_ERROR = SC16IS7XX_LSR_FRAMING_ERROR,         //!< Framing error occurred in data being read from RX FIFO (received data did not have a valid stop bit)
   SC16IS7XX_BREAK_ERROR   = SC16IS7XX_LSR_BREAK_CONDITION_OCCUR, //!< A break condition occurred and associated character is 0x00 (RX was LOW for one character time frame)
-  
+
   SC16IS7XX_RX_ERROR_Mask = ( SC16IS7XX_LSR_BREAK_CONDITION_OCCUR | SC16IS7XX_LSR_FRAMING_ERROR | SC16IS7XX_LSR_PARITY_ERROR | SC16IS7XX_LSR_OVERRUN_ERROR )
 } eSC16IS7XX_ReceiveError;
 
@@ -622,21 +625,21 @@ SC16IS7XX_CONTROL_ITEM_SIZE(SC16IS7XX_TCR_Register, 1);
 typedef enum
 {
   SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_0_CHAR , //!< Ask peer to resume/hold transmission when there is 0 char in the RX FIFO
-  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_4_CHAR , //!< Ask peer to resume/hold transmission when there is 4 char in the RX FIFO
-  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_8_CHAR , //!< Ask peer to resume/hold transmission when there is 8 char in the RX FIFO
-  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_12_CHAR, //!< Ask peer to resume/hold transmission when there is 12 char in the RX FIFO
-  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_16_CHAR, //!< Ask peer to resume/hold transmission when there is 16 char in the RX FIFO
-  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_20_CHAR, //!< Ask peer to resume/hold transmission when there is 20 char in the RX FIFO
-  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_24_CHAR, //!< Ask peer to resume/hold transmission when there is 24 char in the RX FIFO
-  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_28_CHAR, //!< Ask peer to resume/hold transmission when there is 28 char in the RX FIFO
-  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_32_CHAR, //!< Ask peer to resume/hold transmission when there is 32 char in the RX FIFO
-  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_36_CHAR, //!< Ask peer to resume/hold transmission when there is 36 char in the RX FIFO
-  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_40_CHAR, //!< Ask peer to resume/hold transmission when there is 40 char in the RX FIFO
-  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_44_CHAR, //!< Ask peer to resume/hold transmission when there is 44 char in the RX FIFO
-  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_48_CHAR, //!< Ask peer to resume/hold transmission when there is 48 char in the RX FIFO
-  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_52_CHAR, //!< Ask peer to resume/hold transmission when there is 52 char in the RX FIFO
-  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_56_CHAR, //!< Ask peer to resume/hold transmission when there is 56 char in the RX FIFO
-  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_60_CHAR, //!< Ask peer to resume/hold transmission when there is 60 char in the RX FIFO
+  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_4_CHAR , //!< Ask peer to resume/hold transmission when there are 4 chars in the RX FIFO
+  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_8_CHAR , //!< Ask peer to resume/hold transmission when there are 8 chars in the RX FIFO
+  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_12_CHAR, //!< Ask peer to resume/hold transmission when there are 12 chars in the RX FIFO
+  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_16_CHAR, //!< Ask peer to resume/hold transmission when there are 16 chars in the RX FIFO
+  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_20_CHAR, //!< Ask peer to resume/hold transmission when there are 20 chars in the RX FIFO
+  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_24_CHAR, //!< Ask peer to resume/hold transmission when there are 24 chars in the RX FIFO
+  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_28_CHAR, //!< Ask peer to resume/hold transmission when there are 28 chars in the RX FIFO
+  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_32_CHAR, //!< Ask peer to resume/hold transmission when there are 32 chars in the RX FIFO
+  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_36_CHAR, //!< Ask peer to resume/hold transmission when there are 36 chars in the RX FIFO
+  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_40_CHAR, //!< Ask peer to resume/hold transmission when there are 40 chars in the RX FIFO
+  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_44_CHAR, //!< Ask peer to resume/hold transmission when there are 44 chars in the RX FIFO
+  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_48_CHAR, //!< Ask peer to resume/hold transmission when there are 48 chars in the RX FIFO
+  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_52_CHAR, //!< Ask peer to resume/hold transmission when there are 52 chars in the RX FIFO
+  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_56_CHAR, //!< Ask peer to resume/hold transmission when there are 56 chars in the RX FIFO
+  SC16IS7XX_RESUME_WHEN_RX_FIFO_AT_60_CHAR, //!< Ask peer to resume/hold transmission when there are 60 chars in the RX FIFO
 } eSC16IS7XX_TriggerCtrlLevel;
 
 #define SC16IS7XX_TCR_HALT_TRIGGER_LEVEL_Pos           0
@@ -669,14 +672,54 @@ typedef union __SC16IS7XX_PACKED__ SC16IS7XX_TLR_Register
 SC16IS7XX_UNPACKITEM
 SC16IS7XX_CONTROL_ITEM_SIZE(SC16IS7XX_TLR_Register, 1);
 
+//! Tx FIFO Trigger level of characters available for interrupt
+typedef enum
+{
+  SC16IS7XX_TX_FIFO_TRIGGER_AT_4_CHAR_SPACE  =  1, //!< TX FIFO trigger at a level of 4 characters spaces available
+  SC16IS7XX_TX_FIFO_TRIGGER_AT_8_CHAR_SPACE  =  2, //!< TX FIFO trigger at a level of 8 characters spaces available
+  SC16IS7XX_TX_FIFO_TRIGGER_AT_12_CHAR_SPACE =  3, //!< TX FIFO trigger at a level of 12 characters spaces available
+  SC16IS7XX_TX_FIFO_TRIGGER_AT_16_CHAR_SPACE =  4, //!< TX FIFO trigger at a level of 16 characters spaces available
+  SC16IS7XX_TX_FIFO_TRIGGER_AT_20_CHAR_SPACE =  5, //!< TX FIFO trigger at a level of 20 characters spaces available
+  SC16IS7XX_TX_FIFO_TRIGGER_AT_24_CHAR_SPACE =  6, //!< TX FIFO trigger at a level of 24 characters spaces available
+  SC16IS7XX_TX_FIFO_TRIGGER_AT_28_CHAR_SPACE =  7, //!< TX FIFO trigger at a level of 28 characters spaces available
+  SC16IS7XX_TX_FIFO_TRIGGER_AT_32_CHAR_SPACE =  8, //!< TX FIFO trigger at a level of 32 characters spaces available
+  SC16IS7XX_TX_FIFO_TRIGGER_AT_36_CHAR_SPACE =  9, //!< TX FIFO trigger at a level of 36 characters spaces available
+  SC16IS7XX_TX_FIFO_TRIGGER_AT_40_CHAR_SPACE = 10, //!< TX FIFO trigger at a level of 40 characters spaces available
+  SC16IS7XX_TX_FIFO_TRIGGER_AT_44_CHAR_SPACE = 11, //!< TX FIFO trigger at a level of 44 characters spaces available
+  SC16IS7XX_TX_FIFO_TRIGGER_AT_48_CHAR_SPACE = 12, //!< TX FIFO trigger at a level of 48 characters spaces available
+  SC16IS7XX_TX_FIFO_TRIGGER_AT_52_CHAR_SPACE = 13, //!< TX FIFO trigger at a level of 52 characters spaces available
+  SC16IS7XX_TX_FIFO_TRIGGER_AT_56_CHAR_SPACE = 14, //!< TX FIFO trigger at a level of 56 characters spaces available
+  SC16IS7XX_TX_FIFO_TRIGGER_AT_60_CHAR_SPACE = 15, //!< TX FIFO trigger at a level of 60 characters spaces available
+} eSC16IS7XX_IntTxTriggerLevel;
+
+//! Rx FIFO Trigger level of characters available for interrupt
+typedef enum
+{
+  SC16IS7XX_RX_FIFO_TRIGGER_AT_4_CHAR_AVAILABLE  =  1, //!< RX FIFO trigger at a level of 4 characters available
+  SC16IS7XX_RX_FIFO_TRIGGER_AT_8_CHAR_AVAILABLE  =  2, //!< RX FIFO trigger at a level of 8 characters available
+  SC16IS7XX_RX_FIFO_TRIGGER_AT_12_CHAR_AVAILABLE =  3, //!< RX FIFO trigger at a level of 12 characters available
+  SC16IS7XX_RX_FIFO_TRIGGER_AT_16_CHAR_AVAILABLE =  4, //!< RX FIFO trigger at a level of 16 characters available
+  SC16IS7XX_RX_FIFO_TRIGGER_AT_20_CHAR_AVAILABLE =  5, //!< RX FIFO trigger at a level of 20 characters available
+  SC16IS7XX_RX_FIFO_TRIGGER_AT_24_CHAR_AVAILABLE =  6, //!< RX FIFO trigger at a level of 24 characters available
+  SC16IS7XX_RX_FIFO_TRIGGER_AT_28_CHAR_AVAILABLE =  7, //!< RX FIFO trigger at a level of 28 characters available
+  SC16IS7XX_RX_FIFO_TRIGGER_AT_32_CHAR_AVAILABLE =  8, //!< RX FIFO trigger at a level of 32 characters available
+  SC16IS7XX_RX_FIFO_TRIGGER_AT_36_CHAR_AVAILABLE =  9, //!< RX FIFO trigger at a level of 36 characters available
+  SC16IS7XX_RX_FIFO_TRIGGER_AT_40_CHAR_AVAILABLE = 10, //!< RX FIFO trigger at a level of 40 characters available
+  SC16IS7XX_RX_FIFO_TRIGGER_AT_44_CHAR_AVAILABLE = 11, //!< RX FIFO trigger at a level of 44 characters available
+  SC16IS7XX_RX_FIFO_TRIGGER_AT_48_CHAR_AVAILABLE = 12, //!< RX FIFO trigger at a level of 48 characters available
+  SC16IS7XX_RX_FIFO_TRIGGER_AT_52_CHAR_AVAILABLE = 13, //!< RX FIFO trigger at a level of 52 characters available
+  SC16IS7XX_RX_FIFO_TRIGGER_AT_56_CHAR_AVAILABLE = 14, //!< RX FIFO trigger at a level of 56 characters available
+  SC16IS7XX_RX_FIFO_TRIGGER_AT_60_CHAR_AVAILABLE = 15, //!< RX FIFO trigger at a level of 60 characters available
+} eSC16IS7XX_IntRxTriggerLevel;
+
 #define SC16IS7XX_TLR_TX_FIFO_TRIGGER_LEVEL_Pos         0
 #define SC16IS7XX_TLR_TX_FIFO_TRIGGER_LEVEL_Mask        (0xFu << SC16IS7XX_TLR_TX_FIFO_TRIGGER_LEVEL_Pos)
 #define SC16IS7XX_TLR_TX_FIFO_TRIGGER_LEVEL_SET(value)  (((uint8_t)(value) << SC16IS7XX_TLR_TX_FIFO_TRIGGER_LEVEL_Pos) & SC16IS7XX_TLR_TX_FIFO_TRIGGER_LEVEL_Mask) //!< Set TX FIFO trigger levels (4 to 60), number of spaces available
-#define SC16IS7XX_TLR_TX_FIFO_TRIGGER_LEVEL_GET(value)  (((uint8_t)(value) & SC16IS7XX_TLR_TX_FIFO_TRIGGER_LEVEL_Mask) >> SC16IS7XX_TLR_TX_FIFO_TRIGGER_LEVEL_Pos) //!< Get TX FIFO trigger levels (4 to 60), number of spaces available
+#define SC16IS7XX_TLR_TX_FIFO_TRIGGER_LEVEL_GET(value)  (eSC16IS7XX_IntTxTriggerLevel)(((uint8_t)(value) & SC16IS7XX_TLR_TX_FIFO_TRIGGER_LEVEL_Mask) >> SC16IS7XX_TLR_TX_FIFO_TRIGGER_LEVEL_Pos) //!< Get TX FIFO trigger levels (4 to 60), number of spaces available
 #define SC16IS7XX_TLR_RX_FIFO_TRIGGER_LEVEL_Pos         4
 #define SC16IS7XX_TLR_RX_FIFO_TRIGGER_LEVEL_Mask        (0xFu << SC16IS7XX_TLR_RX_FIFO_TRIGGER_LEVEL_Pos)
 #define SC16IS7XX_TLR_RX_FIFO_TRIGGER_LEVEL_SET(value)  (((uint8_t)(value) << SC16IS7XX_TLR_RX_FIFO_TRIGGER_LEVEL_Pos) & SC16IS7XX_TLR_RX_FIFO_TRIGGER_LEVEL_Mask) //!< Set RX FIFO trigger levels (4 to 60), number of characters available
-#define SC16IS7XX_TLR_RX_FIFO_TRIGGER_LEVEL_GET(value)  (((uint8_t)(value) & SC16IS7XX_TLR_RX_FIFO_TRIGGER_LEVEL_Mask) >> SC16IS7XX_TLR_RX_FIFO_TRIGGER_LEVEL_Pos) //!< Get RX FIFO trigger levels (4 to 60), number of characters available
+#define SC16IS7XX_TLR_RX_FIFO_TRIGGER_LEVEL_GET(value)  (eSC16IS7XX_IntRxTriggerLevel)(((uint8_t)(value) & SC16IS7XX_TLR_RX_FIFO_TRIGGER_LEVEL_Mask) >> SC16IS7XX_TLR_RX_FIFO_TRIGGER_LEVEL_Pos) //!< Get RX FIFO trigger levels (4 to 60), number of characters available
 
 //-----------------------------------------------------------------------------
 
@@ -863,8 +906,8 @@ SC16IS7XX_CONTROL_ITEM_SIZE(SC16IS7XX_I2Ccommand, 1);
 //! Interface select
 typedef enum
 {
-  SC16IS7XX_INTERFACE_I2C, //!< Select Interface I2C
   SC16IS7XX_INTERFACE_SPI, //!< Select Interface SPI
+  SC16IS7XX_INTERFACE_I2C, //!< Select Interface I2C
 } eSC16IS7XX_Interface;
 
 //! Channel select
@@ -916,7 +959,7 @@ struct SC16IS7XX
   SPI_Interface SPI;              //!< This is the SPI_Interface descriptor that will be used to communicate with the device
 #  endif
 #endif
-  uint32_t InterfaceClockSpeed;   //!< SPI/I2C clock speed
+  uint32_t InterfaceClockSpeed;   //!< SPI/I2C clock speed in Hertz
 
   //--- GPIO configuration ---
   uint8_t GPIOsOutState;          //!< GPIOs pins output state (0 = set to '0' ; 1 = set to '1'). Used to speed up output change
@@ -943,7 +986,7 @@ typedef struct SC16IS7XX_Config
 
 /*! @brief SC16IS7XX initialization
  *
- * This function initialize the SC16IS7XX driver, call the initialization of the interface driver, ans soft reset the device. It also check the hardware communication with the device
+ * This function initializes the SC16IS7XX driver, call the initialization of the interface driver, and soft reset the device. It also checks the hardware communication with the device
  * @param[in] *pComp Is the pointed structure of the device to be initialized
  * @param[in] *pConf Is the pointed structure of the device configuration. This is mainly the GPIOs startup configuration. This parameter can be NULL if the configuration of GPIO is not helpful
  * @return Returns an #eERRORRESULT value enum
@@ -984,64 +1027,34 @@ bool SC16IS7XX_IsReady(SC16IS7XX *pComp);
 
 
 
-/*! @brief Read data from the SC16IS7XX
- *
- * @param[in] *pComp Is the pointed structure of the device
- * @param[in] channel Is the UART channel where to read data
- * @param[in] address Is the address to be read
- * @param[out] *data Is where the data will be stored
- * @param[in] size Is the size of the data array to read
- * @return Returns an #eERRORRESULT value enum
- */
-eERRORRESULT SC16IS7XX_ReadData(SC16IS7XX *pComp, const eSC16IS7XX_Channel channel, const uint8_t address, uint8_t *data, uint8_t size);
-
-
 /*! @brief Read a register of the SC16IS7XX
  *
- * @param[in] *pComp Is the pointed structure of the device
+ * @param[in] *pComp Is the pointed structure of the device to be used
  * @param[in] channel Is the UART channel where to read data
  * @param[in] registerAddr Is the register address to be read
  * @param[out] *registerValue Is where the data will be stored
  * @return Returns an #eERRORRESULT value enum
  */
-inline eERRORRESULT SC16IS7XX_ReadRegister(SC16IS7XX *pComp, const eSC16IS7XX_Channel channel, const uint8_t registerAddr, uint8_t *registerValue)
-{
-  return SC16IS7XX_ReadData(pComp, channel, registerAddr, registerValue, 1);
-}
+eERRORRESULT SC16IS7XX_ReadRegister(SC16IS7XX *pComp, const eSC16IS7XX_Channel channel, const uint8_t registerAddr, uint8_t *registerValue);
 
 //-----------------------------------------------------------------------------
 
 
 
-/*! @brief Write data to the SC16IS7XX
- *
- * @param[in] *pComp Is the pointed structure of the device
- * @param[in] channel Is the UART channel where to write data
- * @param[in] address Is the address where data will be written
- * @param[in] *data Is the data array to write
- * @param[in] size Is the size of the data array to write
- * @return Returns an #eERRORRESULT value enum
- */
-eERRORRESULT SC16IS7XX_WriteData(SC16IS7XX *pComp, const eSC16IS7XX_Channel channel, const uint8_t address, uint8_t *data, uint8_t size);
-
-
 /*! @brief Write a register of the SC16IS7XX
  *
- * @param[in] *pComp Is the pointed structure of the device
+ * @param[in] *pComp Is the pointed structure of the device to be used
  * @param[in] channel Is the UART channel where to write data
  * @param[in] registerAddr Is the register address where data will be written
  * @param[in] registerValue Is the data to write
  * @return Returns an #eERRORRESULT value enum
  */
-inline eERRORRESULT SC16IS7XX_WriteRegister(SC16IS7XX *pComp, const eSC16IS7XX_Channel channel, const uint8_t registerAddr, uint8_t registerValue)
-{
-  return SC16IS7XX_WriteData(pComp, channel, registerAddr, &registerValue, 1);
-}
+eERRORRESULT SC16IS7XX_WriteRegister(SC16IS7XX *pComp, const eSC16IS7XX_Channel channel, const uint8_t registerAddr, uint8_t registerValue);
 
 
 /*! @brief Modify a register of the SC16IS7XX
  *
- * @param[in] *pComp Is the pointed structure of the device
+ * @param[in] *pComp Is the pointed structure of the device to be used
  * @param[in] channel Is the UART channel where to modify data
  * @param[in] registerAddr Is the register address where data will be written
  * @param[in] registerValue Is the data to write
@@ -1053,7 +1066,7 @@ eERRORRESULT SC16IS7XX_ModifyRegister(SC16IS7XX *pComp, const eSC16IS7XX_Channel
 
 /*! @brief Set register access of the SC16IS7XX
  *
- * @param[in] *pComp Is the pointed structure of the device
+ * @param[in] *pComp Is the pointed structure of the device to be used
  * @param[in] channel Is the UART channel to use
  * @param[in] setAccessTo Is the register set to give access to
  * @param[out] *originalLCRregValue Is the data of the LCR register before setting access
@@ -1064,7 +1077,7 @@ eERRORRESULT SC16IS7XX_SetRegisterAccess(SC16IS7XX *pComp, const eSC16IS7XX_Chan
 
 /*! @brief Return access to general registers of the SC16IS7XX
  *
- * @param[in] *pComp Is the pointed structure of the device
+ * @param[in] *pComp Is the pointed structure of the device to be used
  * @param[in] channel Is the UART channel to use
  * @param[in] originalLCRregValue Is the data of the LCR register before setting access
  * @return Returns an #eERRORRESULT value enum
@@ -1075,9 +1088,9 @@ eERRORRESULT SC16IS7XX_ReturnAccessToGeneralRegister(SC16IS7XX *pComp, const eSC
 
 
 
-/*! @brief Enable Enhanced Functions of the SC16IS7XX device
+/*! @brief Enable Enhanced Functions of the SC16IS7XX
  *
- * @param[in] *pComp Is the pointed structure of the device
+ * @param[in] *pComp Is the pointed structure of the device to be used
  * @param[in] channel Is the channel on which the enhanced functions will be enabled
  * @return Returns an #eERRORRESULT value enum
  */
@@ -1087,7 +1100,7 @@ eERRORRESULT SC16IS7XX_EnableEnhancedFunctions(SC16IS7XX *pComp, eSC16IS7XX_Chan
 
 
 
-/*! @brief Activate the sleep mode of the SC16IS7XX device
+/*! @brief Activate the sleep mode of the SC16IS7XX
  *
  * This function activate the sleep mode on the device
  * @warning Before using this function, the device must have Enhanced Functions enabled by calling SC16IS7XX_EnableEnhancedFunctions()
@@ -1105,13 +1118,13 @@ inline eERRORRESULT SC16IS7XX_ActivateSleepMode(SC16IS7XX *pComp)
  * This function verifies if the device is has sleep mode enable
  * @warning Before using this function, the device must have Enhanced Functions enabled by calling SC16IS7XX_EnableEnhancedFunctions()
  * @param[in] *pComp Is the pointed structure of the device to be used
- * @param[out] *isSleepModeEnable Indicate if the sleep mode is enable
+ * @param[out] *isSleepModeEnable Indicate if the sleep mode is enabled
  * @return Returns an #eERRORRESULT value enum
  */
 eERRORRESULT SC16IS7XX_IsDeviceInSleepMode(SC16IS7XX *pComp, bool* isSleepModeEnable);
 
 
-/*! @brief Manually wake up the SC16IS7XX device
+/*! @brief Manually wake up the SC16IS7XX
  *
  * @warning Before using this function, the device must have Enhanced Functions enabled by calling SC16IS7XX_EnableEnhancedFunctions()
  * @param[in] *pComp Is the pointed structure of the device to be used
@@ -1126,10 +1139,10 @@ inline eERRORRESULT SC16IS7XX_WakeUp(SC16IS7XX *pComp)
 
 
 
-/*! @brief Configure GPIOs of the SC16IS7XX device
+/*! @brief Configure GPIOs of the SC16IS75X/76X
  *
  * @param[in] *pComp Is the pointed structure of the device to be used
- * @param[in] pinsDirection Set the IO pins direction, if bit is '1' then the corresponding GPIO is output else it's input
+ * @param[in] pinsDirection Set the IO pins direction, if bit is '1' then the corresponding GPIO is input else it's output
  * @param[in] pinsLevel Set the IO pins output level, if bit is '1' then the corresponding GPIO is level high else it's level low
  * @param[in] pinsInterruptEnable Set the IO pins interrupt enable, if bit is '1' then a change in the corresponding GPIO input will generate an interrupt else a change in the GPIO input pin will not generate an interrupt
  * @return Returns an #eERRORRESULT value enum
@@ -1197,13 +1210,26 @@ eERRORRESULT SC16IS7XX_SetGPIOPinsInterruptEnable(SC16IS7XX *pComp, uint8_t pins
 // Driver configuration enum
 typedef enum
 {
-  SC16IS7XX_DRIVER_BURST_TX = 0x00, //!< The UART driver will send data to FIFO at once (data sent depend on available space in FIFO)
-  SC16IS7XX_DRIVER_SAFE_TX  = 0x01, //!< The UART driver will send data to FIFO one data at a time and will check if everything went well (slower)
-  SC16IS7XX_DRIVER_BURST_RX = 0x00, //!< The UART driver will receive data from FIFO at once, without checking if each char was received correctly
-  SC16IS7XX_DRIVER_SAFE_RX  = 0x02, //!< The UART driver will receive data from FIFO one data at a time and will check if everything went well (slower)
+  SC16IS7XX_DRIVER_BURST_TX       = 0x00, //!< The UART driver will send data to FIFO at once (data sent depend on available space in FIFO)
+  SC16IS7XX_DRIVER_SAFE_TX        = 0x01, //!< The UART driver will send data to FIFO one data at a time and will check if everything went well (slower)
+  SC16IS7XX_DRIVER_BURST_RX       = 0x00, //!< The UART driver will receive data from FIFO at once, without checking if each char was received correctly
+  SC16IS7XX_DRIVER_SAFE_RX        = 0x02, //!< The UART driver will receive data from FIFO one data at a time and will check if everything went well (slower)
+  SC16IS7XX_TEST_LOOPBACK_AT_INIT = 0x80, //!< Test the UART loopback at startup. It sends 2 chars by loopback UART (just internally) to test the UART configuration (slow at initialization, especially on slow UARTs)
 } eSC16IS7XX_DriverConfig;
 
 typedef eSC16IS7XX_DriverConfig setSC16IS7XX_DriverConfig; //! Set of Driver configuration (can be OR'ed)
+
+//-----------------------------------------------------------------------------
+
+//! SC16IS7XX UART buffer structure
+typedef struct SC16IS7XX_Buffer
+{
+  uint8_t* pData;    //!< Pointer to a buffer (Tx or Rx). This buffer will be a ring buffer
+  size_t BufferSize; //!< Buffer size in bytes
+  size_t PosIn;      //!< Input position in the buffer. Will increment on each byte added to the buffer
+  size_t PosOut;     //!< Output position in the buffer. Will increment on each byte sent to the UART FIFO (Tx) or received by application (Rx)
+  bool IsFull;       //!< Is the buffer full?
+} SC16IS7XX_Buffer;
 
 //-----------------------------------------------------------------------------
 
@@ -1224,6 +1250,12 @@ struct SC16IS7XX_UART
   //--- Device configuration ---
   void *UserDriverData;                   //!< Optional, can be used to store driver data or NULL
   SC16IS7XX *Device;                      //!< SC16IS7XX device where this UART comes from
+
+#ifdef SC16IS7XX_USE_BUFFERS
+  //--- Tx/Rx buffers ---
+  SC16IS7XX_Buffer TxBuffer;              //!< Tx ring buffer. Only used with SC16IS7XX_DRIVER_BURST_TX
+  SC16IS7XX_Buffer RxBuffer;              //!< Rx ring buffer. Only used with SC16IS7XX_DRIVER_BURST_RX
+#endif
 };
 
 //-----------------------------------------------------------------------------
@@ -1263,8 +1295,8 @@ typedef enum
 //! SC16IS7XX IrDA configuration enumerator
 typedef enum
 {
-  SC16IS7XX_IrDA_SIR_3_16_RATIO, //!< IrDA SIR (Standart InfraRed), 3/16 pulse ratio, data rate up to 115.2 kbit/s (default)
-  SC16IS7XX_IrDA_SIR_1_4_RATIO,  //!< IrDA SIR (Standart InfraRed), 1/4 pulse ratio, data rate up to 1.152 Mbit/s (SC16IS76X only). This is not an IrDA MIR (Medium-speed InfraRed)
+  SC16IS7XX_IrDA_SIR_3_16_RATIO, //!< IrDA SIR (Standard InfraRed), 3/16 pulse ratio, data rate up to 115.2 kbit/s (default)
+  SC16IS7XX_IrDA_SIR_1_4_RATIO,  //!< IrDA SIR (Standard InfraRed), 1/4 pulse ratio, data rate up to 1.152 Mbit/s (SC16IS76X only). This is not an IrDA MIR (Medium-speed InfraRed)
 } eSC16IS7XX_IrDAconfig;
 
 //-----------------------------------------------------------------------------
@@ -1295,8 +1327,8 @@ typedef struct SC16IS7XX_HardControlFlow
   eSC16IS7XX_TriggerCtrlLevel HoldAt;      //!< Trigger level to ask peer to hold transmission. Trigger levels is available from 0 to 60 characters with a granularity of four
   eSC16IS7XX_TriggerCtrlLevel ResumeAt;    //!< Trigger level to ask peer to resume transmission. Trigger levels is available from 0 to 60 characters with a granularity of four
   bool UseSpecialCharOnXoff2;              //!< Use special char on Xoff2
-  eSC16IS7XX_PinControlType CTSpinControl; //!< The CTS pin controls the transmitter. If 'SC16IS7XX_MANUAL_PIN_CONTROL', the user need to read the pin manually and stop the transmission. If 'SC16IS7XX_AUTOMATIC_PIN_CONTROL', the transmitter is controlled by the state of the CTS
-  eSC16IS7XX_PinControlType RTSpinControl; //!< The RTS pin is controled by the receiver. If 'SC16IS7XX_MANUAL_PIN_CONTROL', the user need to set the pin manually to stop the peer transmission. If 'SC16IS7XX_AUTOMATIC_PIN_CONTROL', the receiver controls the state of RTS according to HoldAt and ResumeAt value
+  eSC16IS7XX_PinControlType CTSpinControl; //!< The CTS pin controls the transmitter. If 'SC16IS7XX_MANUAL_PIN_CONTROL', the user needs to read the pin manually and stop the transmission. If 'SC16IS7XX_AUTOMATIC_PIN_CONTROL', the transmitter is controlled by the state of the CTS
+  eSC16IS7XX_PinControlType RTSpinControl; //!< The RTS pin is controlled by the receiver. If 'SC16IS7XX_MANUAL_PIN_CONTROL', the user needs to set the pin manually to stop the peer transmission. If 'SC16IS7XX_AUTOMATIC_PIN_CONTROL', the receiver controls the state of RTS according to HoldAt and ResumeAt value
   uint8_t SpecialChar;                     //!< Special character to use (Xoff2). If not used by Conf, leave not configured
 } SC16IS7XX_HardControlFlow;
 
@@ -1309,17 +1341,17 @@ typedef struct SC16IS7XX_SoftControlFlow
   bool UseSpecialCharOnXoff2;           //!< Use special char on Xoff2
   eSC16IS7XX_SoftFlowCtrl Config;       //!< This is the configuration of the Software flow control
   bool XonAnyChar;                      //!< Xon on any character
-  uint8_t Xon1;                         //!< Xon1 character to use. If not used by Conf and XonAnyChar, leave not configured
-  uint8_t Xon2;                         //!< Xon2 character to use. If not used by Conf and XonAnyChar, leave not configured
-  uint8_t Xoff1;                        //!< Xoff1 character to use. If not used by Conf, leave not configured
-  uint8_t Xoff2SpecialChar;             //!< Xoff2/Special character to use. If not used by Conf, leave not configured
+  uint8_t Xon1;                         //!< Xon1 character to use. If not used by 'Config' and XonAnyChar, leave not configured
+  uint8_t Xon2;                         //!< Xon2 character to use. If not used by 'Config' and XonAnyChar, leave not configured
+  uint8_t Xoff1;                        //!< Xoff1 character to use. If not used by 'Config', leave not configured
+  uint8_t Xoff2SpecialChar;             //!< Xoff2/Special character to use. If not used by 'Config', leave not configured
 } SC16IS7XX_SoftControlFlow;
 
 //-----------------------------------------------------------------------------
 
 
 
-//! SC16IS7XX RS-232 specific configuration structure (Fill this struct if UARTtype == SC16IS7XX_UART_RS232)
+//! SC16IS7XX RS-232/RS-422 specific configuration structure (Fill this struct if UARTtype == SC16IS7XX_UART_RS232)
 typedef struct SC16IS7XX_RS232config
 {
   eSC16IS7XX_ControlFlowType ControlFlowType;  //!< Type of control flow (Hardware or Software)
@@ -1337,9 +1369,9 @@ typedef struct SC16IS7XX_RS485config
   eSC16IS7XX_RS485RTSconfig RTScontrol;      //!< Determine the RTS control
   bool RTSoutInversion;                      //!< Reverses the polarity of the RTS pin if the UART is in auto RS-485 RTS mode
   eSC16IS7XX_AutoRS485 AutoRS485mode;        //!< Auto RS-485 mode
-  uint8_t AddressChar;                       //!< This is the address char. If not used (i.e AutoRS485 != SC16IS7XX_AUTO_ADDRESS_DETECT), leave not configured. If used (i.e AutoRS485 == SC16IS7XX_AUTO_ADDRESS_DETECT), set HardFlowControl.UseSpecialCharOnXoff2 to 'false'
+  uint8_t AddressChar;                       //!< This is the address char. If not used (i.e AutoRS485mode != SC16IS7XX_AUTO_ADDRESS_DETECT), leave not configured. If used (i.e AutoRS485mode == SC16IS7XX_AUTO_ADDRESS_DETECT), set HardFlowControl.UseSpecialCharOnXoff2 to 'false'
 
-  bool UseHardwareControlFlow;               //!< Use hardware control flow ? Will not be used if RTScontrol == SC16IS7XX_RS485_HARD_FLOW_CONTROL_RTS
+  bool UseHardwareControlFlow;               //!< Use hardware control flow? Will not be used if RTScontrol == SC16IS7XX_RS485_HARD_FLOW_CONTROL_RTS
   SC16IS7XX_HardControlFlow HardFlowControl; //!< Hardware control flow configuration
 } SC16IS7XX_RS485config;
 
@@ -1349,15 +1381,15 @@ typedef struct SC16IS7XX_IrDAconfig
 {
   eSC16IS7XX_IrDAconfig IrDAmode;            //!< This is the IrDA mode (Slow/fast)
 
-  bool UseSoftwareControlFlow;               //!< Use software control flow ?
+  bool UseSoftwareControlFlow;               //!< Use software control flow?
   SC16IS7XX_SoftControlFlow SoftFlowControl; //!< Software control flow configuration
 } SC16IS7XX_IrDAconfig;
 
 
-//! SC16IS7XX RS-485 specific configuration structure (Fill this struct if UARTtype == SC16IS7XX_UART_Modem)
+//! SC16IS7XX Modem specific configuration structure (Fill this struct if UARTtype == SC16IS7XX_UART_Modem)
 typedef struct SC16IS7XX_ModemConfig
 {
-  bool UseHardwareControlFlow;               //!< Use hardware control flow ?
+  bool UseHardwareControlFlow;               //!< Use hardware control flow?
   SC16IS7XX_HardControlFlow HardFlowControl; //!< Hardware control flow configuration
 } SC16IS7XX_ModemConfig;
 
@@ -1368,11 +1400,11 @@ typedef struct SC16IS7XX_UARTconfig
 {
   //--- UART configuration ---
   eSC16IS7XX_UARTtype UARTtype;      //!< Type of the UART (ie. RS232, RS485, IrDA, Full Modem, ...)
+  eSC16IS7XX_DataLength UARTwordLen; //!< UART data length
   eSC16IS7XX_Parity UARTparity;      //!< UART parity
   eSC16IS7XX_StopBit UARTstopBit;    //!< UART stop bit length
-  eSC16IS7XX_DataLength UARTwordLen; //!< UART data length
   uint32_t UARTbaudrate;             //!< UART desired baudrate
-  int32_t *UARTbaudrateError;        //!< Point to a int32_t variable where the UART baudrate error will be stored (divide by 1000 to get the percentage). Set to NULL if no baudrate error is necessary
+  int32_t *UARTbaudrateError;        //!< Point to an int32_t variable where the UART baudrate error will be stored (divide by 1000 to get the percentage). Set to NULL if no baudrate error is necessary
   union
   {
     SC16IS7XX_RS232config RS232;     //!< Fill this struct if UARTtype == SC16IS7XX_UART_RS232
@@ -1384,9 +1416,12 @@ typedef struct SC16IS7XX_UARTconfig
   bool DisableReceiver;              //!< Disable receiver. UART will stop receiving data immediately once this is set to 'true', and any data in the TSR will be sent to the receive FIFO
 
   //--- FIFO configuration ---
-  bool UseFIFOs;                         //!< If use FIFO, then FIFO is enable at startup
-  eSC16IS7XX_TriggerCtrlLevel TxTrigLvl; //!< FIFO Tx trigger level used for interrupt generation. levels is available from 4 to 60 characters with a granularity of four
-  eSC16IS7XX_TriggerCtrlLevel RxTrigLvl; //!< FIFO Rx trigger level used for interrupt generation. levels is available from 4 to 60 characters with a granularity of four
+  bool UseFIFOs;                          //!< If use FIFO, then FIFO is enabled at startup
+  eSC16IS7XX_IntTxTriggerLevel TxTrigLvl; //!< FIFO Tx trigger level used for interrupt generation, number of spaces available. Levels is available from 4 to 60 characters with a granularity of four
+  eSC16IS7XX_IntRxTriggerLevel RxTrigLvl; //!< FIFO Rx trigger level used for interrupt generation, number of characters available. Levels is available from 4 to 60 characters with a granularity of four
+
+  //--- Interrupt configuration ---
+  setSC16IS7XX_Interrupts Interrupts;     //!< Interrupt configuration of the UART (can be OR'ed)
 } SC16IS7XX_UARTconfig;
 
 //********************************************************************************************************************
@@ -1397,9 +1432,9 @@ typedef struct SC16IS7XX_UARTconfig
 
 /*! @brief SC16IS7XX UART initialization
  *
- * This function initialize the SC16IS7XX UART driver.
+ * This function initializes the SC16IS7XX UART driver.
  * It sets the baudrate and configure the specified UART according to the UARTConf set in parameter.
- * @warning The pUART->Device shoud be initialized by using Init_SC16IS7XX() before using this function
+ * @warning The pUART->Device should be initialized by using Init_SC16IS7XX() before using this function
  * @param[in] *pUART Is the pointed structure of the UART to be initialized
  * @param[in] *pUARTConf Is the pointed structure of the UART configuration
  * @return Returns an #eERRORRESULT value enum
@@ -1407,29 +1442,30 @@ typedef struct SC16IS7XX_UARTconfig
 eERRORRESULT SC16IS7XX_InitUART(SC16IS7XX_UART *pUART, const SC16IS7XX_UARTconfig *pUARTConf);
 
 
-/*! @brief UART communication tests of the SC16IS7XX
+/*! @brief UART communication tests of the SC16IS7XX UART
  *
  * This function sets the loopback mode and test the UART, then puts the UART in normal operating mode
+ * This function fully depends on the UART speed
  * @param[in] *pUART Is the pointed structure of the UART to test
  * @return Returns an #eERRORRESULT value enum
  */
 eERRORRESULT SC16IS7XX_UARTCommTest(SC16IS7XX_UART *pUART);
 
 
-/*! @brief Set UART baudrate of the SC16IS7XX
+/*! @brief Set UART baudrate of the SC16IS7XX UART
  *
  * Calculate the optimal configuration to get the smallest error and configure the device
- * The error is saved in UARTxConf->UartBaudrateError, it need to be divide by 1000 to get the percentage
+ * The error is saved in pUARTxConf->UartBaudrateError, it needs to be divided by 1000 to get the percentage
  * @param[in] *pUART Is the pointed structure of the device to be used
- * @param[in] *UART1Conf Is the pointed structure of the UART configuration
+ * @param[in] *pUARTConf Is the pointed structure of the UART configuration
  * @return Returns an #eERRORRESULT value enum
  */
-eERRORRESULT SC16IS7XX_SetUARTBaudRate(SC16IS7XX_UART *pUART, const SC16IS7XX_UARTconfig *UARTConf);
+eERRORRESULT SC16IS7XX_SetUARTBaudRate(SC16IS7XX_UART *pUART, const SC16IS7XX_UARTconfig *pUARTConf);
 
 //-----------------------------------------------------------------------------
 
 
-/*! @brief Reset Rx and/or Tx FIFO of the SC16IS7XX
+/*! @brief Reset Rx and/or Tx FIFO of the SC16IS7XX UART
  *
  * @param[in] *pUART Is the pointed structure of the UART to be used
  * @param[in] resetTxFIFO Set to 'true' to reset the transmit FIFO
@@ -1439,18 +1475,7 @@ eERRORRESULT SC16IS7XX_SetUARTBaudRate(SC16IS7XX_UART *pUART, const SC16IS7XX_UA
 eERRORRESULT SC16IS7XX_ResetFIFO(SC16IS7XX_UART *pUART, bool resetTxFIFO, bool resetRxFIFO);
 
 
-/*! @brief Reset Rx FIFO of the SC16IS7XX
- *
- * @param[in] *pUART Is the pointed structure of the UART to be used
- * @return Returns an #eERRORRESULT value enum
- */
-inline eERRORRESULT SC16IS7XX_ResetRxFIFO(SC16IS7XX_UART *pUART)
-{
-  return SC16IS7XX_ResetFIFO(pUART, false, true);
-}
-
-
-/*! @brief Reset Tx FIFO of the SC16IS7XX
+/*! @brief Reset Tx FIFO of the SC16IS7XX UART
  *
  * @param[in] *pUART Is the pointed structure of the UART to be used
  * @return Returns an #eERRORRESULT value enum
@@ -1460,11 +1485,22 @@ inline eERRORRESULT SC16IS7XX_ResetTxFIFO(SC16IS7XX_UART *pUART)
   return SC16IS7XX_ResetFIFO(pUART, true, false);
 }
 
+
+/*! @brief Reset Rx FIFO of the SC16IS7XX UART
+ *
+ * @param[in] *pUART Is the pointed structure of the UART to be used
+ * @return Returns an #eERRORRESULT value enum
+ */
+inline eERRORRESULT SC16IS7XX_ResetRxFIFO(SC16IS7XX_UART *pUART)
+{
+  return SC16IS7XX_ResetFIFO(pUART, false, true);
+}
+
 //-----------------------------------------------------------------------------
 
 
 
-/*! @brief Enable/disable Transmitter and/or receiver of the SC16IS7XX
+/*! @brief Enable/disable Transmitter and/or receiver of the SC16IS7XX UART
  *
  * @param[in] *pUART Is the pointed structure of the UART to be used
  * @param[in] disableTx Set to 'true' to disable the transmitter, set to 'false' to enable the transmitter
@@ -1477,7 +1513,7 @@ eERRORRESULT SC16IS7XX_TxRxDisable(SC16IS7XX_UART *pUART, bool disableTx, bool d
 
 
 
-/*! @brief Configure interrupt of the SC16IS7XX device
+/*! @brief Configure interrupt of the SC16IS7XX UART
  *
  * @param[in] *pUART Is the pointed structure of the UART to be used
  * @param[in] interruptsFlags Is the set of flags where interrupts will be enabled. Flags can be OR'ed
@@ -1486,19 +1522,20 @@ eERRORRESULT SC16IS7XX_TxRxDisable(SC16IS7XX_UART *pUART, bool disableTx, bool d
 eERRORRESULT SC16IS7XX_ConfigureInterrupt(SC16IS7XX_UART *pUART, setSC16IS7XX_Interrupts interruptsFlags);
 
 
-/*! @brief Get interrupt event of the SC16IS7XX device
+/*! @brief Get interrupt event of the SC16IS7XX UART
  *
  * @param[in] *pUART Is the pointed structure of the UART to be used
- * @param[out] interruptFlag Is the return value of the interrupt event
+ * @param[out] *intPending Indicate if an interrupt is pending. If 'false' do not take care of *interruptFlag
+ * @param[out] *interruptFlag Is the return value of the interrupt event
  * @return Returns an #eERRORRESULT value enum
  */
-eERRORRESULT SC16IS7XX_GetInterruptEvents(SC16IS7XX_UART *pUART, eSC16IS7XX_InterruptSource *interruptFlag);
+eERRORRESULT SC16IS7XX_GetInterruptEvents(SC16IS7XX_UART *pUART, bool *intPending, eSC16IS7XX_InterruptSource *interruptFlag);
 
 //-----------------------------------------------------------------------------
 
 
 
-/*! @brief Get available space in the transmit FIFO of the SC16IS7XX device
+/*! @brief Get available space in the transmit FIFO of the SC16IS7XX UART
  *
  * @param[in] *pUART Is the pointed structure of the UART to be used
  * @param[out] *availableSpace Is the count of the available space in the transmit FIFO
@@ -1507,7 +1544,7 @@ eERRORRESULT SC16IS7XX_GetInterruptEvents(SC16IS7XX_UART *pUART, eSC16IS7XX_Inte
 eERRORRESULT SC16IS7XX_GetAvailableSpaceTxFIFO(SC16IS7XX_UART *pUART, uint8_t *availableSpace);
 
 
-/*! @brief Get number of characters stored in receive FIFO of the SC16IS7XX device
+/*! @brief Get number of characters stored in receive FIFO of the SC16IS7XX UART
  *
  * @param[in] *pUART Is the pointed structure of the UART to be used
  * @param[out] *dataCount Is the number of characters stored in receive FIFO
@@ -1519,59 +1556,65 @@ eERRORRESULT SC16IS7XX_GetDataCountRxFIFO(SC16IS7XX_UART *pUART, uint8_t *dataCo
 
 
 
-/*! @brief Try to transmit data to UART FIFO of the SC16IS7XX
+/*! @brief Try to transmit data to UART FIFO of the SC16IS7XX UART
  *
+ * If SC16IS7XX_USE_BUFFERS defined and SC16IS7XX_DRIVER_SAFE_TX set to DriverConfig and TxBuffer ≠ NULL the data will be sent using the TxBuffer
  * @param[in] *pUART/pIntDev Is the pointed structure of the UART to be used
- * @param[in] *data Is the data array to send to the UART transmiter through the transmit FIFO
+ * @param[in] *data Is the data array to send to the UART transmitter through the transmit FIFO
  * @param[in] size Is the count of data to send to the UART transmitter through the transmit FIFO
  * @param[out] *actuallySent Is the count of data actually sent to the transmit FIFO (0 to 64 chars)
  * @return Returns an #eERRORRESULT value enum
  */
-eERRORRESULT SC16IS7XX_TryTransmitData(SC16IS7XX_UART *pUART, uint8_t *data, size_t size, size_t *actuallySent);
+eERRORRESULT SC16IS7XX_TransmitData(SC16IS7XX_UART *pUART, uint8_t *data, size_t size, size_t *actuallySent);
 #ifdef USE_GENERICS_DEFINED
-eERRORRESULT SC16IS7XX_TryTransmitData_Gen(UART_Interface *pIntDev, uint8_t *data, size_t size, size_t *actuallySent);
+eERRORRESULT SC16IS7XX_TransmitData_Gen(UART_Interface *pIntDev, uint8_t *data, size_t size, size_t *actuallySent);
 #endif
 
 
-/*! @brief Transmit data to UART FIFO of the SC16IS7XX
+/*! @brief Transmit data to UART FIFO of the SC16IS7XX UART
  *
+ * If SC16IS7XX_USE_BUFFERS defined and SC16IS7XX_DRIVER_SAFE_TX set to DriverConfig and TxBuffer ≠ NULL the data will be sent using the TxBuffer
  * @param[in] *pUART Is the pointed structure of the UART to be used
- * @param[in] data Is the data to send to the UART transmitter through the transmit FIFO
+ * @param[in] data Is the char to send to the UART transmitter through the transmit FIFO
  * @return Returns an #eERRORRESULT value enum
  */
-eERRORRESULT SC16IS7XX_TransmitChar(SC16IS7XX_UART *pUART, const uint8_t data);
+eERRORRESULT SC16IS7XX_TransmitChar(SC16IS7XX_UART *pUART, const char data);
+
+//-----------------------------------------------------------------------------
 
 
-/*! @brief Receive available data from UART FIFO of the SC16IS7XX
+/*! @brief Receive available data from UART FIFO of the SC16IS7XX UART
  *
  * This function will stop receiving data from FIFO at first char error if the DriverConfig is SC16IS7XX_DRIVER_SAFE_RX
+ * If SC16IS7XX_USE_BUFFERS defined and SC16IS7XX_DRIVER_BURST_RX set to DriverConfig and RxBuffer ≠ NULL the data will be received using the RxBuffer
  * @param[in] *pUART/pIntDev Is the pointed structure of the UART to be used
  * @param[out] *data Is where the data will be stored
  * @param[in] size Is the count of data that the data buffer can hold
  * @param[out] *actuallyReceived Is the count of data actually received from the received FIFO (0 to 64 chars)
- * @param[out] *lastCharError Is the last char received error. Set to 0 if no errors
+ * @param[out] *lastDataError Is the last char received error. Set to 0 if no errors
  * @return Returns an #eERRORRESULT value enum
  */
-eERRORRESULT SC16IS7XX_ReceiveData(SC16IS7XX_UART *pUART, uint8_t *data, size_t size, size_t *actuallyReceived, uint8_t *lastCharError);
+eERRORRESULT SC16IS7XX_ReceiveData(SC16IS7XX_UART *pUART, uint8_t *data, size_t size, size_t *actuallyReceived, setSC16IS7XX_ReceiveError *lastDataError);
 #ifdef USE_GENERICS_DEFINED
-eERRORRESULT SC16IS7XX_ReceiveData_Gen(UART_Interface *pIntDev, uint8_t *data, size_t size, size_t *actuallyReceived, uint8_t *lastCharError);
+eERRORRESULT SC16IS7XX_ReceiveData_Gen(UART_Interface *pIntDev, uint8_t *data, size_t size, size_t *actuallyReceived, uint8_t *lastDataError);
 #endif
 
 
-/*! @brief Receive data from UART FIFO of the SC16IS7XX
+/*! @brief Receive data from UART FIFO of the SC16IS7XX UART
  *
+ * If SC16IS7XX_USE_BUFFERS defined and SC16IS7XX_DRIVER_BURST_RX set to DriverConfig and RxBuffer ≠ NULL the data will be received using the RxBuffer
  * @param[in] *pUART Is the pointed structure of the UART to be used
- * @param[out] *data Is where the data will be stored
+ * @param[out] *data Is where the char will be stored
  * @param[out] *charError Is the char received error. Set to 0 if no errors
  * @return Returns an #eERRORRESULT value enum
  */
-eERRORRESULT SC16IS7XX_ReceiveChar(SC16IS7XX_UART *pUART, uint8_t *data, setSC16IS7XX_ReceiveError *charError);
+eERRORRESULT SC16IS7XX_ReceiveChar(SC16IS7XX_UART *pUART, char *data, setSC16IS7XX_ReceiveError *charError);
 
 //-----------------------------------------------------------------------------
 
 
 
-/*! @brief Get control pins (CD, RI, DSR, CTS) status of the SC16IS7XX device
+/*! @brief Get control pins (CD, RI, DSR, CTS) status of the SC16IS7XX UART
  *
  * @warning A call to this function clears CD, RI, DSR, CTS change status
  * @param[in] *pUART Is the pointed structure of the UART to be used
@@ -1581,7 +1624,7 @@ eERRORRESULT SC16IS7XX_ReceiveChar(SC16IS7XX_UART *pUART, uint8_t *data, setSC16
 eERRORRESULT SC16IS7XX_GetControlPinStatus(SC16IS7XX_UART *pUART, uint8_t *controlPinsStatus);
 
 
-/*! @brief Is Clear To Send (CTS) of the SC16IS7XX device
+/*! @brief Is Clear To Send (CTS) of the SC16IS7XX UART
  *
  * @warning A call to this function clears CD, RI, DSR, CTS change status
  * @param[in] *pUART Is the pointed structure of the UART to be used

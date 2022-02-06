@@ -19,6 +19,7 @@
 
 //-----------------------------------------------------------------------------
 #include "SC16IS7XX.h"
+#include "string.h"
 //-----------------------------------------------------------------------------
 #ifdef __cplusplus
 #  include <cstdint>
@@ -43,12 +44,38 @@ extern "C" {
 //=============================================================================
 // Prototypes for private functions
 //=============================================================================
+/*! @brief Read data from the SC16IS7XX
+ *
+ * @param[in] *pComp Is the pointed structure of the device to be used
+ * @param[in] channel Is the UART channel where to read data
+ * @param[in] address Is the address to be read
+ * @param[out] *data Is where the data will be stored
+ * @param[in] size Is the size of the data array to read
+ * @return Returns an #eERRORRESULT value enum
+ */
+static eERRORRESULT __SC16IS7XX_ReadData(SC16IS7XX *pComp, const eSC16IS7XX_Channel channel, const uint8_t address, uint8_t *data, uint8_t size);
+/*! @brief Write data to the SC16IS7XX
+ *
+ * @param[in] *pComp Is the pointed structure of the device to be used
+ * @param[in] channel Is the UART channel where to write data
+ * @param[in] address Is the address where data will be written
+ * @param[in] *data Is the data array to write
+ * @param[in] size Is the size of the data array to write
+ * @return Returns an #eERRORRESULT value enum
+ */
+static eERRORRESULT __SC16IS7XX_WriteData(SC16IS7XX *pComp, const eSC16IS7XX_Channel channel, const uint8_t address, uint8_t *data, uint8_t size);
+//-----------------------------------------------------------------------------
 // DO NOT USE DIRECTLY, use SC16IS7XX_InitUART() instead! Control Flow needs to be configured with a safe UART configuration to avoid spurious effects, which is done in the SC16IS7XX_InitUART() function
 static eERRORRESULT __SC16IS7XX_SetControlFlowConfiguration(SC16IS7XX_UART *pUART, SC16IS7XX_HardControlFlow *pHardFlow, SC16IS7XX_SoftControlFlow *pSoftFlow, bool useAdressChar);
 // DO NOT USE DIRECTLY, use SC16IS7XX_InitUART() instead! UART configuration needs to be configured with a safe UART configuration to avoid spurious effects, which is done in the SC16IS7XX_InitUART() function
 static eERRORRESULT __SC16IS7XX_SetUARTConfiguration(SC16IS7XX_UART *pUART, const SC16IS7XX_UARTconfig *pUARTConf);
 // DO NOT USE DIRECTLY, use SC16IS7XX_InitUART() instead! UART configuration needs to be configured with a safe UART configuration to avoid spurious effects, which is done in the SC16IS7XX_InitUART() function
-static eERRORRESULT __SC16IS7XX_ConfigureFIFOs(SC16IS7XX_UART *pUART, bool useFIFOs, eSC16IS7XX_TriggerCtrlLevel txTrigLvl, eSC16IS7XX_TriggerCtrlLevel rxTrigLvl);
+static eERRORRESULT __SC16IS7XX_ConfigureFIFOs(SC16IS7XX_UART *pUART, bool useFIFOs, eSC16IS7XX_IntTxTriggerLevel txTrigLvl, eSC16IS7XX_IntRxTriggerLevel rxTrigLvl);
+//-----------------------------------------------------------------------------
+#ifdef SC16IS7XX_USE_BUFFERS
+//! Transfer available data from Rx buffer of the UART
+static void __SC16IS7XX_RxBufferToDataBuff(SC16IS7XX_Buffer* const pBuf, uint8_t *data, size_t *size, size_t *actuallyReceived);
+#endif
 //-----------------------------------------------------------------------------
 #define SC16IS7XX_ABSOLUTE(value)  ( (value) < 0.0f ? -(value) : value )
 //-----------------------------------------------------------------------------
@@ -59,7 +86,7 @@ static eERRORRESULT __SC16IS7XX_ConfigureFIFOs(SC16IS7XX_UART *pUART, bool useFI
 const SC16IS7XX_Limits SC16IS7XX_LIMITS[SC16IS7XX_PN_COUNT] =
 {
   { .I2C_CLOCK_MAX = SC16IS7XX_I2C_CLOCK_MAX, .SPI_CLOCK_MAX = SC16IS7XX_SPI_CLOCK_MAX, .IrDA_1_4_RATIO = false, .HAVE_GPIO = false, .HAVE_2_UARTS = false, }, // SC16IS740
-  { .I2C_CLOCK_MAX = SC16IS7XX_I2C_CLOCK_MAX, .SPI_CLOCK_MAX = SC16IS7XX_SPI_CLOCK_MAX, .IrDA_1_4_RATIO = false, .HAVE_GPIO = false, .HAVE_2_UARTS = false, }, // SC16IS741
+  { .I2C_CLOCK_MAX = SC16IS7XX_I2C_CLOCK_MAX, .SPI_CLOCK_MAX = SC16IS7XX_SPI_CLOCK_MAX, .IrDA_1_4_RATIO = false, .HAVE_GPIO = false, .HAVE_2_UARTS = false, }, // SC16IS741/SC16IS741A
   { .I2C_CLOCK_MAX = SC16IS7XX_I2C_CLOCK_MAX, .SPI_CLOCK_MAX = SC16IS7XX_SPI_CLOCK_MAX, .IrDA_1_4_RATIO = false, .HAVE_GPIO = true , .HAVE_2_UARTS = false, }, // SC16IS750
   { .I2C_CLOCK_MAX = SC16IS7XX_I2C_CLOCK_MAX, .SPI_CLOCK_MAX = SC16IS7XX_SPI_CLOCK_MAX, .IrDA_1_4_RATIO = false, .HAVE_GPIO = true , .HAVE_2_UARTS = true , }, // SC16IS752
   { .I2C_CLOCK_MAX = SC16IS7XX_I2C_CLOCK_MAX, .SPI_CLOCK_MAX = SC16IS76X_SPI_CLOCK_MAX, .IrDA_1_4_RATIO = true , .HAVE_GPIO = true , .HAVE_2_UARTS = false, }, // SC16IS760
@@ -81,8 +108,11 @@ eERRORRESULT Init_SC16IS7XX(SC16IS7XX *pComp, const SC16IS7XX_Config *pConf)
 #endif
   eERRORRESULT Error;
 
-  //--- Check device limits ---------------------------------
+  //--- Check device configuration --------------------------
   if (pComp->DevicePN >= SC16IS7XX_PN_COUNT) return ERR__UNKNOWN_DEVICE;
+  if ((pComp->XtalFreq != 0) && (pComp->XtalFreq > SC16IS7XX_XTAL_FREQ_MAX)) return ERR__FREQUENCY_ERROR; // The device crystal should not be > 24MHz
+  if ((pComp->OscFreq  != 0) && (pComp->OscFreq  > SC16IS7XX_OSC_FREQ_MAX )) return ERR__FREQUENCY_ERROR; // The device oscillator should not be > 80MHz
+  if ((pComp->XtalFreq == 0) || (pComp->OscFreq  != 0)) return ERR__CONFIGURATION;                        // Both XtalFreq and OscFreq are configured to 0
 
   //--- Configure the Interface -----------------------------
 #ifdef SC16IS7XX_I2C_DEFINED
@@ -195,9 +225,9 @@ bool SC16IS7XX_IsReady(SC16IS7XX *pComp)
 
 
 //=============================================================================
-// Read data from the SC16IS7XX
+// [STATIC] Read data from the SC16IS7XX
 //=============================================================================
-eERRORRESULT SC16IS7XX_ReadData(SC16IS7XX *pComp, const eSC16IS7XX_Channel channel, const uint8_t address, uint8_t *data, uint8_t size)
+eERRORRESULT __SC16IS7XX_ReadData(SC16IS7XX *pComp, const eSC16IS7XX_Channel channel, const uint8_t address, uint8_t *data, uint8_t size)
 {
 #ifdef CHECK_NULL_PARAM
   if (pComp == NULL) return ERR__PARAMETER_ERROR;
@@ -238,7 +268,7 @@ eERRORRESULT SC16IS7XX_ReadData(SC16IS7XX *pComp, const eSC16IS7XX_Channel chann
     //--- Send the address ---
     SPIInterface_Packet AddrPacketDesc = SPI_INTERFACE_TX_DATA_DESC(&Address, sizeof(uint8_t), false);      // Prepare SPI packet description to use
     Error = pSPI->fnSPI_Transfer(pSPI, &AddrPacketDesc);                                                    // Transfer the address
-    if (Error != ERR_OK) return Error;                                                                      // If there is an error while calling fnI2C_Transfer() then return the Error
+    if (Error != ERR_OK) return Error;                                                                      // If there is an error while calling fnSPI_Transfer() then return the Error
     //--- Get the data ---
     SPIInterface_Packet DataPacketDesc = SPI_INTERFACE_RX_DATA_WITH_DUMMYBYTE_DESC(0x00, data, size, true); // Prepare SPI packet description to use
     Error = pSPI->fnSPI_Transfer(pSPI, &DataPacketDesc);                                                    // Get the data and stop transfer at last byte
@@ -250,9 +280,19 @@ eERRORRESULT SC16IS7XX_ReadData(SC16IS7XX *pComp, const eSC16IS7XX_Channel chann
 
 
 //=============================================================================
-// Write data to the SC16IS7XX
+// Read a register of the SC16IS7XX
 //=============================================================================
-eERRORRESULT SC16IS7XX_WriteData(SC16IS7XX *pComp, const eSC16IS7XX_Channel channel, const uint8_t address, uint8_t *data, uint8_t size)
+inline eERRORRESULT SC16IS7XX_ReadRegister(SC16IS7XX *pComp, const eSC16IS7XX_Channel channel, const uint8_t registerAddr, uint8_t *registerValue)
+{
+  return __SC16IS7XX_ReadData(pComp, channel, registerAddr, registerValue, 1);
+}
+
+
+
+//=============================================================================
+// [STATIC] Write data to the SC16IS7XX
+//=============================================================================
+eERRORRESULT __SC16IS7XX_WriteData(SC16IS7XX *pComp, const eSC16IS7XX_Channel channel, const uint8_t address, uint8_t *data, uint8_t size)
 {
 #ifdef CHECK_NULL_PARAM
   if (pComp == NULL) return ERR__PARAMETER_ERROR;
@@ -278,7 +318,7 @@ eERRORRESULT SC16IS7XX_WriteData(SC16IS7XX *pComp, const eSC16IS7XX_Channel chan
     if (Error != ERR_OK) return Error;                                // If there is an error while calling fnI2C_Transfer() then return the Error
     //--- Send the data ---
     I2CInterface_Packet DataPacketDesc = I2C_INTERFACE_TX_DATA_DESC(ChipAddrW, false, data, size, true, I2C_WRITE_THEN_WRITE_SECOND_PART);
-    Error = pI2C->fnI2C_Transfer(pI2C, &DataPacketDesc);              // Continue by transfering the data, and stop transfer at last byte
+    Error = pI2C->fnI2C_Transfer(pI2C, &DataPacketDesc);              // Continue by transferring the data, and stop transfer at last byte
   }
 #endif
 #ifdef SC16IS7XX_SPI_DEFINED
@@ -291,13 +331,23 @@ eERRORRESULT SC16IS7XX_WriteData(SC16IS7XX *pComp, const eSC16IS7XX_Channel chan
     //--- Send the address ---
     SPIInterface_Packet AddrPacketDesc = SPI_INTERFACE_TX_DATA_DESC(&Address, sizeof(uint8_t), false); // Prepare SPI packet description to use
     Error = pSPI->fnSPI_Transfer(pSPI, &AddrPacketDesc);                                               // Transfer the address
-    if (Error != ERR_OK) return Error;                                                                 // If there is an error while calling fnI2C_Transfer() then return the Error
+    if (Error != ERR_OK) return Error;                                                                 // If there is an error while calling fnSPI_Transfer() then return the Error
     //--- Send the data ---
     SPIInterface_Packet DataPacketDesc = SPI_INTERFACE_TX_DATA_DESC(data, size, true);                 // Prepare SPI packet description to use
     Error = pSPI->fnSPI_Transfer(pSPI, &DataPacketDesc);                                               // Send the data and stop transfer at last byte
   }
 #endif
   return Error;
+}
+
+
+
+//=============================================================================
+// Write a register of the SC16IS7XX
+//=============================================================================
+inline eERRORRESULT SC16IS7XX_WriteRegister(SC16IS7XX *pComp, const eSC16IS7XX_Channel channel, const uint8_t registerAddr, uint8_t registerValue)
+{
+  return __SC16IS7XX_WriteData(pComp, channel, registerAddr, &registerValue, 1);
 }
 
 
@@ -516,7 +566,7 @@ eERRORRESULT SC16IS7XX_SetGPIOPinsInterruptEnable(SC16IS7XX *pComp, uint8_t pins
 eERRORRESULT SC16IS7XX_InitUART(SC16IS7XX_UART *pUART, const SC16IS7XX_UARTconfig *pUARTConf)
 {
 #ifdef CHECK_NULL_PARAM
-  if ((pUART == NULL) || (pUARTConf == NULL)) return SCR_PARAMETERERROR;
+  if ((pUART == NULL) || (pUARTConf == NULL)) return ERR__PARAMETER_ERROR;
 #endif
   SC16IS7XX* pComp = pUART->Device; // Get the SC16IS7XX device of this UART
 #ifdef CHECK_NULL_PARAM
@@ -528,6 +578,20 @@ eERRORRESULT SC16IS7XX_InitUART(SC16IS7XX_UART *pUART, const SC16IS7XX_UARTconfi
   //--- Check the UART channel ------------------------------
   if (pUART->Channel >= SC16IS7XX_CHANNEL_COUNT) return ERR__UNKNOWN_ELEMENT;
   if ((pUART->Channel == SC16IS7XX_CHANNEL_B) && (SC16IS7XX_LIMITS[pComp->DevicePN].HAVE_2_UARTS == false)) return ERR__UNKNOWN_ELEMENT;
+
+#ifdef SC16IS7XX_USE_BUFFERS
+  //--- Configure buffers ---
+  if (pUART->TxBuffer.pData != NULL)
+  {
+    pUART->TxBuffer.PosIn  = pUART->TxBuffer.PosOut = 0;
+    pUART->TxBuffer.IsFull = false;
+  }
+  if (pUART->RxBuffer.pData != NULL)
+  {
+    pUART->RxBuffer.PosIn  = pUART->RxBuffer.PosOut = 0;
+    pUART->RxBuffer.IsFull = false;
+  }
+#endif
 
   //--- Enable Enhanced Functions ---------------------------
   Error = SC16IS7XX_EnableEnhancedFunctions(pComp, pUART->Channel);    // Enable the enhanced function of the UART channel
@@ -568,13 +632,16 @@ eERRORRESULT SC16IS7XX_InitUART(SC16IS7XX_UART *pUART, const SC16IS7XX_UARTconfi
   Error = SC16IS7XX_WriteRegister(pComp, pUART->Channel, RegSC16IS7XX_IER, OriginalIER.IER); // Re-enable previous interrupts with the sleep state if previously set
   if (Error != ERR_OK) return Error;                                   // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
 
-  //--- Enable Tx and/or Rx configuration -------------------
+  //--- Transmitter and receiver configuration --------------
   Error = SC16IS7XX_TxRxDisable(pUART, pUARTConf->DisableTransmitter, pUARTConf->DisableReceiver); // Disable Transmitter and receiver
   if (Error != ERR_OK) return Error;                                   // If there is an error while calling SC16IS7XX_TxRxDisable() then return the error
 
   //--- Test UART connection --------------------------------
-  Error = SC16IS7XX_UARTCommTest(pUART);                               // Test the UART before Control Flow because the Control Flow may interfere with the test
-  if (Error != ERR_OK) return Error;                                   // If there is an error while calling SC16IS7XX_UARTCommTest() then return the error
+  if ((pUART->DriverConfig & SC16IS7XX_TEST_LOOPBACK_AT_INIT) > 0)     // If a UART loopback test is asked...
+  {
+    Error = SC16IS7XX_UARTCommTest(pUART);                             // Test the UART before Control Flow because the Control Flow may interfere with the test
+    if (Error != ERR_OK) return Error;                                 // If there is an error while calling SC16IS7XX_UARTCommTest() then return the error
+  }
 
   //--- Set Control Flow ------------------------------------
   SC16IS7XX_HardControlFlow* pHardFlow = NULL;
@@ -605,15 +672,19 @@ eERRORRESULT SC16IS7XX_InitUART(SC16IS7XX_UART *pUART, const SC16IS7XX_UARTconfi
   }
   Error = __SC16IS7XX_SetControlFlowConfiguration(pUART, pHardFlow, pSoftFlow, UseAddressChar); // Configure the control flow
   if (Error != ERR_OK) return Error;                                   // If there is an error while calling __SC16IS7XX_SetControlFlowConfiguration() then return the error
-  
-  //--- Disable TCR and TLR ---
-  return SC16IS7XX_ModifyRegister(pComp, pUART->Channel, RegSC16IS7XX_MCR, SC16IS7XX_MCR_TCR_AND_TLR_REGISTER_DISABLE, SC16IS7XX_MCR_TCR_AND_TLR_REGISTER_Mask);
+
+  //--- Configure TCR and TLR -------------------------------
+  Error = SC16IS7XX_ModifyRegister(pComp, pUART->Channel, RegSC16IS7XX_MCR, SC16IS7XX_MCR_TCR_AND_TLR_REGISTER_DISABLE, SC16IS7XX_MCR_TCR_AND_TLR_REGISTER_Mask);
+  if (Error != ERR_OK) return Error;                                   // If there is an error while calling SC16IS7XX_ModifyRegister() then return the error
+
+  //--- Configure interrupts --------------------------------
+  return SC16IS7XX_ConfigureInterrupt(pUART, pConf->Interrupts);
 }
 
 
 
 //=============================================================================
-// UART communication tests of the SC16IS7XX
+// UART communication tests of the SC16IS7XX UART
 //=============================================================================
 eERRORRESULT SC16IS7XX_UARTCommTest(SC16IS7XX_UART *pUART)
 {
@@ -626,7 +697,7 @@ eERRORRESULT SC16IS7XX_UARTCommTest(SC16IS7XX_UART *pUART)
 #endif
   eERRORRESULT Error;
   setSC16IS7XX_ReceiveError CharError;
-  uint8_t Value;
+  char Value;
 
   //--- Set UART in loopback mode ---
   SC16IS7XX_MCR_Register RegMCR;
@@ -641,19 +712,19 @@ eERRORRESULT SC16IS7XX_UARTCommTest(SC16IS7XX_UART *pUART)
   if (Error != ERR_OK) return Error;                                                    // If there is an error while calling SC16IS7XX_ResetFIFO() then return the error
 
   //--- Test UART communication ---
-  Error = SC16IS7XX_TransmitChar(pUART, 0x55);                                          // Transmit char 0x55 by UART
+  Error = SC16IS7XX_TransmitChar(pUART, (char)0x55);                                    // Transmit char 0x55 by UART
   if (Error != ERR_OK) return Error;                                                    // If there is an error while calling SC16IS7XX_TransmitCharByUART() then return the error
   Error = SC16IS7XX_ReceiveChar(pUART, &Value, &CharError);                             // Receive a char UART by UART
   if (Error != ERR_OK) return Error;                                                    // If there is an error while calling SC16IS7XX_ReceiveCharByUART() then return the error
   if (CharError != SC16IS7XX_NO_RX_ERROR) return ERR__PERIPHERAL_NOT_VALID;             // If the received data create an error then the peripheral is not valid
-  if (Value != 0x55) return ERR__PERIPHERAL_NOT_VALID;                                  // If the read back value is not the same as the one writen, return an error
+  if (Value != (char)0x55) return ERR__PERIPHERAL_NOT_VALID;                            // If the read back value is not the same as the one written, return an error
 
-  Error = SC16IS7XX_TransmitChar(pUART, 0xAA);                                          // Transmit char 0xAA by UART
+  Error = SC16IS7XX_TransmitChar(pUART, (char)0xAA);                                    // Transmit char 0xAA by UART
   if (Error != ERR_OK) return Error;                                                    // If there is an error while calling SC16IS7XX_TransmitCharByUART() then return the error
   Error = SC16IS7XX_ReceiveChar(pUART, &Value, &CharError);                             // Receive a char UART by UART
   if (Error != ERR_OK) return Error;                                                    // If there is an error while calling SC16IS7XX_ReceiveCharByUART() then return the error
   if (CharError != SC16IS7XX_NO_RX_ERROR) return ERR__PERIPHERAL_NOT_VALID;             // If the received data create an error then the peripheral is not valid
-  if (Value != 0xAA) return ERR__PERIPHERAL_NOT_VALID;                                  // If the read back value is not the same as the one writen, return an error
+  if (Value != (char)0xAA) return ERR__PERIPHERAL_NOT_VALID;                            // If the read back value is not the same as the one written, return an error
 
   RegMCR.MCR &= SC16IS7XX_MCR_NORMAL_OPERATING_MODE;                                    // Set normal operating mode
   return SC16IS7XX_WriteRegister(pComp, pUART->Channel, RegSC16IS7XX_MCR, RegMCR.MCR);  // Write the MCR register
@@ -662,7 +733,7 @@ eERRORRESULT SC16IS7XX_UARTCommTest(SC16IS7XX_UART *pUART)
 
 
 //=============================================================================
-// [STATIC] Set UART configuration of the SC16IS7XX
+// [STATIC] Set UART configuration of the SC16IS7XX UART
 //=============================================================================
 // DO NOT USE DIRECTLY, use SC16IS7XX_InitUART() instead! UART configuration needs to be configured with a safe UART configuration to avoid spurious effects, which is done in the SC16IS7XX_InitUART() function
 eERRORRESULT __SC16IS7XX_SetUARTConfiguration(SC16IS7XX_UART *pUART, const SC16IS7XX_UARTconfig *pUARTConf)
@@ -787,7 +858,7 @@ eERRORRESULT __SC16IS7XX_SetUARTConfiguration(SC16IS7XX_UART *pUART, const SC16I
 
 
 //=============================================================================
-// Set UART baudrate of the SC16IS7XX
+// Set UART baudrate of the SC16IS7XX UART
 //=============================================================================
 eERRORRESULT SC16IS7XX_SetUARTBaudRate(SC16IS7XX_UART *pUART, const SC16IS7XX_UARTconfig *pUARTConf)
 {
@@ -824,7 +895,7 @@ eERRORRESULT SC16IS7XX_SetUARTBaudRate(SC16IS7XX_UART *pUART, const SC16IS7XX_UA
       {
         if (pUARTConf->UARTbaudrate > SC16IS76X_IrDA_SPEED_MAX) return ERR__BAUDRATE_ERROR;  // The UART baudrate should not be > max IrDA baudrate (SC16IS76X only)
       }
-      else return ERR__NOT_SUPPORTED;                                                        // IrDA SIR 1/4 ratio not supported on SC16IS7XX whot are not SC16IS76X
+      else return ERR__NOT_SUPPORTED;                                                        // IrDA SIR 1/4 ratio not supported on SC16IS7XX who are not SC16IS76X
     }
     else if (pUARTConf->UARTbaudrate > SC16IS7XX_IrDA_SPEED_MAX) return ERR__BAUDRATE_ERROR; // The UART baudrate should not be > max IrDA baudrate
   }
@@ -877,7 +948,7 @@ eERRORRESULT SC16IS7XX_SetUARTBaudRate(SC16IS7XX_UART *pUART, const SC16IS7XX_UA
 
 
 //=============================================================================
-// [STATIC] Configure an UART Control Flow of the SC16IS7XX
+// [STATIC] Configure an UART Control Flow of the SC16IS7XX UART
 //=============================================================================
 // DO NOT USE DIRECTLY, use SC16IS7XX_InitUART() instead! Control Flow needs to be configured with a safe UART configuration to avoid spurious effects, which is done in the SC16IS7XX_InitUART() function
 eERRORRESULT __SC16IS7XX_SetControlFlowConfiguration(SC16IS7XX_UART *pUART, SC16IS7XX_HardControlFlow *pHardFlow, SC16IS7XX_SoftControlFlow *pSoftFlow, bool useAdressChar)
@@ -971,10 +1042,10 @@ eERRORRESULT __SC16IS7XX_SetControlFlowConfiguration(SC16IS7XX_UART *pUART, SC16
 
 //**********************************************************************************************************************************************************
 //=============================================================================
-// [STATIC] Configure interrupt of the SC16IS7XX device
+// [STATIC] Configure interrupt of the SC16IS7XX device UART
 //=============================================================================
 // DO NOT USE DIRECTLY, use SC16IS7XX_InitUART() instead! UART configuration needs to be configured with a safe UART configuration to avoid spurious effects, which is done in the SC16IS7XX_InitUART() function
-eERRORRESULT __SC16IS7XX_ConfigureFIFOs(SC16IS7XX_UART *pUART, bool useFIFOs, eSC16IS7XX_TriggerCtrlLevel txTrigLvl, eSC16IS7XX_TriggerCtrlLevel rxTrigLvl)
+eERRORRESULT __SC16IS7XX_ConfigureFIFOs(SC16IS7XX_UART *pUART, bool useFIFOs, eSC16IS7XX_IntTxTriggerLevel txTrigLvl, eSC16IS7XX_IntRxTriggerLevel rxTrigLvl)
 {
 #ifdef CHECK_NULL_PARAM
   if (pUART == NULL) return ERR__PARAMETER_ERROR;
@@ -1000,7 +1071,7 @@ eERRORRESULT __SC16IS7XX_ConfigureFIFOs(SC16IS7XX_UART *pUART, bool useFIFOs, eS
 
 
 //=============================================================================
-// Reset Rx and/or Tx FIFO of the SC16IS7XX
+// Reset Rx and/or Tx FIFO of the SC16IS7XX UART
 //=============================================================================
 eERRORRESULT SC16IS7XX_ResetFIFO(SC16IS7XX_UART *pUART, bool resetTxFIFO, bool resetRxFIFO)
 {
@@ -1032,7 +1103,7 @@ eERRORRESULT SC16IS7XX_ResetFIFO(SC16IS7XX_UART *pUART, bool resetTxFIFO, bool r
 
 //**********************************************************************************************************************************************************
 //=============================================================================
-// Enable/disable Transmitter and/or receiver of the SC16IS7XX
+// Enable/disable Transmitter and/or receiver of the SC16IS7XX UART
 //=============================================================================
 eERRORRESULT SC16IS7XX_TxRxDisable(SC16IS7XX_UART *pUART, bool disableTx, bool disableRx)
 {
@@ -1057,7 +1128,7 @@ eERRORRESULT SC16IS7XX_TxRxDisable(SC16IS7XX_UART *pUART, bool disableTx, bool d
 
 //**********************************************************************************************************************************************************
 //=============================================================================
-// Configure interrupt of the SC16IS7XX device
+// Configure interrupt of the SC16IS7XX UART
 //=============================================================================
 eERRORRESULT SC16IS7XX_ConfigureInterrupt(SC16IS7XX_UART *pUART, setSC16IS7XX_Interrupts interruptsFlags)
 {
@@ -1074,9 +1145,9 @@ eERRORRESULT SC16IS7XX_ConfigureInterrupt(SC16IS7XX_UART *pUART, setSC16IS7XX_In
 
 
 //=============================================================================
-// Get interrupt event of the SC16IS7XX device
+// Get interrupt event of the SC16IS7XX UART
 //=============================================================================
-eERRORRESULT SC16IS7XX_GetInterruptEvents(SC16IS7XX_UART *pUART, eSC16IS7XX_InterruptSource *interruptFlag)
+eERRORRESULT SC16IS7XX_GetInterruptEvents(SC16IS7XX_UART *pUART, bool *intPending, eSC16IS7XX_InterruptSource *interruptFlag)
 {
 #ifdef CHECK_NULL_PARAM
   if (pUART == NULL) return ERR__PARAMETER_ERROR;
@@ -1090,6 +1161,7 @@ eERRORRESULT SC16IS7XX_GetInterruptEvents(SC16IS7XX_UART *pUART, eSC16IS7XX_Inte
 
   Error = SC16IS7XX_ReadRegister(pComp, pUART->Channel, RegSC16IS7XX_IIR, &RegIIR.IIR);       // Read the IIR register
   if (Error != ERR_OK) return Error;                                                          // If there is an error while calling SC16IS7XX_ReadRegister() then return the error
+  *intPending    = (RegIIR.IIR & SC16IS7XX_IIR_INTERRUPT_PENDING_Mask) == 0;                  // Interrupt pending status
   *interruptFlag = (eSC16IS7XX_InterruptSource)SC16IS7XX_IIR_INTERRUT_SOURCE_GET(RegIIR.IIR); // Extract interrupt
   return ERR_OK;
 }
@@ -1100,7 +1172,7 @@ eERRORRESULT SC16IS7XX_GetInterruptEvents(SC16IS7XX_UART *pUART, eSC16IS7XX_Inte
 
 //**********************************************************************************************************************************************************
 //=============================================================================
-// Get available space in the transmit FIFO of the SC16IS7XX device
+// Get available space in the transmit FIFO of the SC16IS7XX UART
 //=============================================================================
 eERRORRESULT SC16IS7XX_GetAvailableSpaceTxFIFO(SC16IS7XX_UART *pUART, uint8_t *availableSpace)
 {
@@ -1117,7 +1189,7 @@ eERRORRESULT SC16IS7XX_GetAvailableSpaceTxFIFO(SC16IS7XX_UART *pUART, uint8_t *a
 
 
 //=============================================================================
-// Get number of characters stored in receive FIFO of the SC16IS7XX device
+// Get number of characters stored in receive FIFO of the SC16IS7XX UART
 //=============================================================================
 eERRORRESULT SC16IS7XX_GetDataCountRxFIFO(SC16IS7XX_UART *pUART, uint8_t *dataCount)
 {
@@ -1137,9 +1209,9 @@ eERRORRESULT SC16IS7XX_GetDataCountRxFIFO(SC16IS7XX_UART *pUART, uint8_t *dataCo
 
 //**********************************************************************************************************************************************************
 //=============================================================================
-// Try to transmit data to UART FIFO of the SC16IS7XX
+// Try to transmit data to UART FIFO of the SC16IS7XX UART
 //=============================================================================
-eERRORRESULT SC16IS7XX_TryTransmitData(SC16IS7XX_UART *pUART, uint8_t *data, size_t size, size_t *actuallySent)
+eERRORRESULT SC16IS7XX_TransmitData(SC16IS7XX_UART *pUART, uint8_t *data, size_t size, size_t *actuallySent)
 {
 #ifdef CHECK_NULL_PARAM
   if ((pUART == NULL) || (actuallySent == NULL)) return ERR__PARAMETER_ERROR;
@@ -1148,121 +1220,245 @@ eERRORRESULT SC16IS7XX_TryTransmitData(SC16IS7XX_UART *pUART, uint8_t *data, siz
 #ifdef CHECK_NULL_PARAM
   if (pComp == NULL) return ERR__UNKNOWN_DEVICE;
 #endif
+  const bool IsSafeTX = ((pUART->DriverConfig & SC16IS7XX_DRIVER_SAFE_TX) > 0);
   eERRORRESULT Error;
+  *actuallySent = 0;
+
+#ifdef SC16IS7XX_USE_BUFFERS
+  SC16IS7XX_Buffer* const pBuf = &pUART->TxBuffer;
+  size_t AvailableBufSize;
+  if ((pBuf->pData != NULL) && (IsSafeTX == false) && (pBuf->IsFull == false))
+  {
+    //--- Move data to Tx buffer ---
+    if (pBuf->PosIn >= pBuf->PosOut)
+         AvailableBufSize = pBuf->BufferSize - pBuf->PosIn;                            // Calculate space available to the end of buffer
+    else AvailableBufSize = pBuf->PosOut - pBuf->PosIn;                                // Calculate space available to Out position
+    *actuallySent = (size > AvailableBufSize ? AvailableBufSize : size);               // Set how many data will be store into the Tx buffer
+    if (*actuallySent > 0)
+    {
+      memcpy(&pBuf->pData[pBuf->PosIn], data, *actuallySent);                          // Copy data to Tx buffer
+      pBuf->PosIn += *actuallySent;                                                    // Increment In position
+      if (pBuf->PosIn >= pBuf->BufferSize) pBuf->PosIn -= pBuf->BufferSize;            // Correct In position
+      pBuf->IsFull = (pBuf->PosIn == pBuf->PosOut);                                    // If after incrementing both In and Out are at the same position then the buffer is full
+    }
+  }
+#endif
 
   //--- Get free space on Tx FIFO ---
   uint8_t AvailableSpace;
-  Error = SC16IS7XX_GetAvailableSpaceTxFIFO(pUART, &AvailableSpace); // Get how many space there is in the transmit FIFO
-  if (Error != ERR_OK) return Error;                                 // If there is an error while calling SC16IS7XX_GetAvailableSpaceTxFIFO() then return the error
+  Error = SC16IS7XX_GetAvailableSpaceTxFIFO(pUART, &AvailableSpace);                   // Get how many space there is in the transmit FIFO
+  if (Error != ERR_OK) return Error;                                                   // If there is an error while calling SC16IS7XX_GetAvailableSpaceTxFIFO() then return the error
 
   //--- Send data if possible ---
-  if ((pUART->DriverConfig & SC16IS7XX_DRIVER_SAFE_TX) > 0)          //*** Safe transmit
+  if (IsSafeTX)                                                                        //*** Safe transmit
   {
-    *actuallySent = 0;
     size_t CountToSend = (size > (size_t)AvailableSpace ? (size_t)AvailableSpace : size);
     while (CountToSend > 0)
     {
       Error = SC16IS7XX_WriteRegister(pComp, pUART->Channel, RegSC16IS7XX_THR, *data);
-      if (Error != ERR_OK) return Error;                             // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
+      if (Error != ERR_OK) return Error;                                               // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
       ++(*actuallySent);
       ++data;
       --CountToSend;
     }
   }
-  else                                                               //*** Burst transmit
+  else                                                                                 //*** Burst transmit
   {
-    *actuallySent = (size > (size_t)AvailableSpace ? (size_t)AvailableSpace : size);          // Set how many data will be actually sent
-    return SC16IS7XX_WriteData(pComp, pUART->Channel, RegSC16IS7XX_THR, data, *actuallySent); // Send all possible data at once
+    size_t DataSizeToSend = 0;
+    uint8_t* pData;
+
+#ifdef SC16IS7XX_USE_BUFFERS
+    if (pBuf->pData != NULL)
+    {
+      pData = &pBuf->pData[pBuf->PosOut];                                              // Select data to send
+      //--- Calculate data size to send ---
+      if ((pBuf->PosOut != pBuf->PosIn) || pBuf->IsFull)                               // Only if there are data to send
+      {
+        if (pBuf->PosOut >= pBuf->PosIn)
+             AvailableBufSize = pBuf->BufferSize - pBuf->PosIn;                        // Calculate space available to the end of buffer
+        else AvailableBufSize = pBuf->PosIn - pBuf->PosOut;                            // Calculate space available to Out position
+        DataSizeToSend = (AvailableBufSize > (size_t)AvailableSpace ? (size_t)AvailableSpace : AvailableBufSize); // Set how many data will actually be sent
+        if (DataSizeToSend > 0)
+        {
+          pBuf->PosOut += DataSizeToSend;                                              // Increment Out position
+          if (pBuf->PosOut >= pBuf->BufferSize) pBuf->PosOut -= pBuf->BufferSize;      // Correct Out position
+          pBuf->IsFull = false;                                                        // If data will be send, then the buffer will not be full
+        }
+      }
+    }
+    else
+#endif
+    {
+      *actuallySent = (size > (size_t)AvailableSpace ? (size_t)AvailableSpace : size); // Set how many data will actually be sent
+      DataSizeToSend = *actuallySent;
+      pData = data;
+    }
+    return __SC16IS7XX_WriteData(pComp, pUART->Channel, RegSC16IS7XX_THR, pData, DataSizeToSend); // Send all possible data at once
   }
   return ERR_OK;
 }
 
 #ifdef USE_GENERICS_DEFINED
-eERRORRESULT SC16IS7XX_TryTransmitData_Gen(UART_Interface *pIntDev, uint8_t *data, size_t size, size_t *actuallySent)
+eERRORRESULT SC16IS7XX_TransmitData_Gen(UART_Interface *pIntDev, uint8_t *data, size_t size, size_t *actuallySent)
 {
 #ifdef CHECK_NULL_PARAM
   if (pIntDev == NULL) return ERR__PARAMETER_ERROR;
 #endif
   SC16IS7XX_UART* pUART = (SC16IS7XX_UART*)(pIntDev->InterfaceDevice); // Get the SC16IS7XX_UART device of this UART port
-  return SC16IS7XX_TryTransmitData(pUART, data, size, actuallySent);
+  return SC16IS7XX_TransmitData(pUART, data, size, actuallySent);
 }
 #endif
 
 
 
 //=============================================================================
-// Transmit data to UART FIFO of the SC16IS7XX
+// Transmit data to UART FIFO of the SC16IS7XX UART
 //=============================================================================
-eERRORRESULT SC16IS7XX_TransmitChar(SC16IS7XX_UART *pUART, const uint8_t data)
+eERRORRESULT SC16IS7XX_TransmitChar(SC16IS7XX_UART *pUART, const char data)
 {
   eERRORRESULT Error;
   uint8_t DataToSend = (uint8_t)data;
   size_t ActuallySent = 0;
-  do 
+  do
   {
-    Error = SC16IS7XX_TryTransmitData(pUART, &DataToSend, 1, &ActuallySent);
-    if (Error != ERR_OK) return Error; // If there is an error while calling SC16IS7XX_TryTransmitData() then return the error
+    Error = SC16IS7XX_TransmitData(pUART, &DataToSend, 1, &ActuallySent);
+    if (Error != ERR_OK) return Error; // If there is an error while calling SC16IS7XX_TransmitData() then return the error
   } while (ActuallySent == 0);
   return ERR_OK;
 }
 
 
 
+
+
+//**********************************************************************************************************************************************************
+#ifdef SC16IS7XX_USE_BUFFERS
+//=============================================================================
+// [STATIC] Transfer available data from Rx buffer of the UART
+//=============================================================================
+void __SC16IS7XX_RxBufferToDataBuff(SC16IS7XX_Buffer* const pBuf, uint8_t *data, size_t *size, size_t *actuallyReceived)
+{
+  size_t AvailableBufSize;
+  if ((pBuf->PosOut != pBuf->PosIn) || pBuf->IsFull)                           // Only if there are data in the buffer
+  {
+    if (pBuf->PosOut >= pBuf->PosIn)
+         AvailableBufSize = pBuf->BufferSize - pBuf->PosOut;                   // Calculate data available to the end of buffer
+    else AvailableBufSize = pBuf->PosIn - pBuf->PosOut;                        // Calculate data available to In position
+    *actuallyReceived = (*size > AvailableBufSize ? AvailableBufSize : *size); // Set how many data will be store into the Tx buffer
+    if (*actuallyReceived > 0)
+    {
+      memcpy(data, &pBuf->pData[pBuf->PosOut], *actuallyReceived);             // Copy data from Rx buffer
+      *size -= *actuallyReceived;                                              // Subtract the size of data with actually received
+      pBuf->PosOut += *actuallyReceived;                                       // Increment In position
+      if (pBuf->PosOut >= pBuf->BufferSize) pBuf->PosOut -= pBuf->BufferSize;  // Correct In position
+      pBuf->IsFull = false;                                                    // If data are removed from buffer, then the buffer is no longer full
+    }
+  }
+}
+#endif
+
+
+
 //=============================================================================
 // Receive available data from UART FIFO of the SC16IS7XX
 //=============================================================================
-eERRORRESULT SC16IS7XX_ReceiveData(SC16IS7XX_UART *pUART, uint8_t *data, size_t size, size_t *actuallyReceived, setSC16IS7XX_ReceiveError *lastCharError)
+eERRORRESULT SC16IS7XX_ReceiveData(SC16IS7XX_UART *pUART, uint8_t *data, size_t size, size_t *actuallyReceived, setSC16IS7XX_ReceiveError *lastDataError)
 {
 #ifdef CHECK_NULL_PARAM
-  if ((pUART == NULL) || (data == NULL) || (actuallyReceived == NULL) || (lastCharError == NULL)) return ERR__PARAMETER_ERROR;
+  if ((pUART == NULL) || (data == NULL) || (actuallyReceived == NULL) || (lastDataError == NULL)) return ERR__PARAMETER_ERROR;
 #endif
   SC16IS7XX* pComp = pUART->Device; // Get the SC16IS7XX device of this UART
 #ifdef CHECK_NULL_PARAM
   if (pComp == NULL) return ERR__UNKNOWN_DEVICE;
 #endif
+  const bool IsSafeRX = ((pUART->DriverConfig & SC16IS7XX_DRIVER_SAFE_RX) > 0);
   eERRORRESULT Error;
   SC16IS7XX_LSR_Register RegLSR;
 
+#ifdef SC16IS7XX_USE_BUFFERS
+  SC16IS7XX_Buffer* const pBuf = &pUART->RxBuffer;
+  //--- Move data from Rx buffer ---
+  if ((pBuf->pData != NULL) && (IsSafeRX == false)) __SC16IS7XX_RxBufferToDataBuff(pBuf, data, &size, actuallyReceived);
+#endif
+
   //--- Get available data count in Rx FIFO ---
   uint8_t AvailableData;
+  *actuallyReceived = 0;
   Error = SC16IS7XX_GetDataCountRxFIFO(pUART, &AvailableData);                                     // Get how many characters there is in the receive FIFO
   if (Error != ERR_OK) return Error;                                                               // If there is an error while calling SC16IS7XX_GetDataCountRxFIFO() then return the error
 
   //--- Send data if possible ---
-  if ((pUART->DriverConfig & SC16IS7XX_DRIVER_SAFE_RX) > 0)                                        //*** Safe receive
+  if (IsSafeRX)                                                                                    //*** Safe receive
   {
-    *actuallyReceived = 0;
     size_t CountToGet = (size > (size_t)AvailableData ? (size_t)AvailableData : size);
     while (CountToGet > 0)
     {
       //--- Verify current char ---
       Error = SC16IS7XX_ReadRegister(pComp, pUART->Channel, RegSC16IS7XX_LSR, &RegLSR.LSR);        // Read the LSR register
       if (Error != ERR_OK) return Error;                                                           // If there is an error while calling SC16IS7XX_ReadRegister() then return the error
-      *lastCharError = (setSC16IS7XX_ReceiveError)(RegLSR.LSR & (uint8_t)SC16IS7XX_RX_ERROR_Mask); // Get last received char error
+      *lastDataError = (setSC16IS7XX_ReceiveError)(RegLSR.LSR & (uint8_t)SC16IS7XX_RX_ERROR_Mask); // Get last received char error
       Error = SC16IS7XX_ReadRegister(pComp, pUART->Channel, RegSC16IS7XX_RHR, data);               // Receive the next char in FIFO
       if (Error != ERR_OK) return Error;                                                           // If there is an error while calling SC16IS7XX_ReadRegister() then return the error
       (*actuallyReceived)++;
-      if (*lastCharError != SC16IS7XX_NO_RX_ERROR) return ERR__RECEIVE_ERROR;
+      if (*lastDataError != SC16IS7XX_NO_RX_ERROR) return ERR__RECEIVE_ERROR;
       data++;
       CountToGet--;
     }
   }
   else                                                                                           //*** Burst receive
   {
-    *actuallyReceived = (size > (size_t)AvailableData ? (size_t)AvailableData : size);           // Set how many data will be actually received
-    return SC16IS7XX_ReadData(pComp, pUART->Channel, RegSC16IS7XX_RHR, data, *actuallyReceived); // Receive all possible data at once
+    size_t DataSizeToGet = 0;
+    uint8_t* pData;
+
+#ifdef SC16IS7XX_USE_BUFFERS
+    size_t AvailableBufSize;
+    if (pBuf->pData != NULL)
+    {
+      pData = &pBuf->pData[pBuf->PosIn];                                                         // Select data to get
+      //--- Calculate data size to get ---
+      if (pBuf->IsFull == false)                                                                 // Only if the buffer is not full
+      {
+         if (pBuf->PosIn >= pBuf->PosOut)
+              AvailableBufSize = pBuf->BufferSize - pBuf->PosIn;                                 // Calculate data available to the end of buffer
+         else AvailableBufSize = pBuf->PosOut - pBuf->PosIn;                                     // Calculate data available to Out position
+         DataSizeToGet = (AvailableBufSize > (size_t)AvailableData ? (size_t)AvailableData : AvailableBufSize); // Set how many data will actually be received
+         if (DataSizeToGet > 0)
+         {
+           pBuf->PosIn += DataSizeToGet;                                                         // Increment Out position
+           if (pBuf->PosIn >= pBuf->BufferSize) pBuf->PosIn -= pBuf->BufferSize;                 // Correct Out position
+           pBuf->IsFull = (pBuf->PosOut == pBuf->PosIn);                                         // Buffer is full only if the buffer positions are the same after retrieving data
+         }
+      }
+    }
+    else
+#endif
+    {
+      *actuallyReceived = (size > (size_t)AvailableData ? (size_t)AvailableData : size);         // Set how many data will actually be received
+      DataSizeToGet = *actuallyReceived;
+      pData = data;
+    }
+    Error = __SC16IS7XX_ReadData(pComp, pUART->Channel, RegSC16IS7XX_RHR, pData, DataSizeToGet); // Receive all possible data at once
+#ifdef SC16IS7XX_USE_BUFFERS
+    if ((Error == ERR_OK) && (pBuf->pData != NULL))                                              // Not a DMA transfer (otherwise Error would be ERR__BUSY, ERR__SPI_BUSY, or ERR__I2C_BUSY)
+    {
+      //--- Move data from Rx buffer ---
+      __SC16IS7XX_RxBufferToDataBuff(pBuf, data, &size, actuallyReceived);                       // Copy the new data received to data buffer
+    }
+    else
+#endif
+    return Error;
   }
   return ERR_OK;
 }
 
 #ifdef USE_GENERICS_DEFINED
-eERRORRESULT SC16IS7XX_ReceiveData_Gen(UART_Interface *pIntDev, uint8_t *data, size_t size, size_t *actuallyReceived, setSC16IS7XX_ReceiveError *lastCharError)
+eERRORRESULT SC16IS7XX_ReceiveData_Gen(UART_Interface *pIntDev, uint8_t *data, size_t size, size_t *actuallyReceived, uint8_t *lastDataError)
 {
 #ifdef CHECK_NULL_PARAM
   if (pIntDev == NULL) return ERR__PARAMETER_ERROR;
 #endif
   SC16IS7XX_UART* pUART = (SC16IS7XX_UART*)(pIntDev->InterfaceDevice); // Get the SC16IS7XX_UART device of this UART port
-  return SC16IS7XX_ReceiveData(pUART, data, size, actuallyReceived, lastCharError);
+  return SC16IS7XX_ReceiveData(pUART, data, size, actuallyReceived, lastDataError);
 }
 #endif
 
@@ -1271,13 +1467,13 @@ eERRORRESULT SC16IS7XX_ReceiveData_Gen(UART_Interface *pIntDev, uint8_t *data, s
 //=============================================================================
 // Receive data from UART FIFO of the SC16IS7XX
 //=============================================================================
-eERRORRESULT SC16IS7XX_ReceiveChar(SC16IS7XX_UART *pUART, uint8_t *data, setSC16IS7XX_ReceiveError *charError)
+eERRORRESULT SC16IS7XX_ReceiveChar(SC16IS7XX_UART *pUART, char *data, setSC16IS7XX_ReceiveError *charError)
 {
   eERRORRESULT Error;
   size_t ActuallyReceived = 0;
-  do 
+  do
   {
-    Error = SC16IS7XX_ReceiveData(pUART, data, 1, &ActuallyReceived, charError);
+    Error = SC16IS7XX_ReceiveData(pUART, (uint8_t*)data, 1, &ActuallyReceived, charError);
     if (Error != ERR_OK) return Error; // If there is an error while calling SC16IS7XX_ReceiveData() then return the error
   } while (ActuallyReceived == 0);
   return ERR_OK;

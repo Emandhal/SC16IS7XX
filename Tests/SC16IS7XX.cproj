@@ -458,6 +458,7 @@
       <Value>USE_ERRORS_STRING</Value>
       <Value>USE_DYNAMIC_INTERFACE</Value>
       <Value>USE_GENERICS_DEFINED</Value>
+      <Value>SC16IS7XX_USE_BUFFERS</Value>
     </ListValues>
   </armgcc.compiler.symbols.DefSymbols>
   <armgcc.compiler.directories.IncludePaths>

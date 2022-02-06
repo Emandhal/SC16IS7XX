@@ -49,13 +49,15 @@ const char UARTsStringsNames[DEVICE_COUNT+1][10+1/* \0 */] =
 
 //-----------------------------------------------------------------------------
 
+// Tests data
 static size_t CurrentCharToSend = 0;
+static size_t CurrentCharReceived = 0;
+#define TEST_RECEIVE_BUFFER_LENGTH  500
+static char RxBufferTests[TEST_RECEIVE_BUFFER_LENGTH];
 
 // Test strings
 #define RS232_TEST_LENGTH  64
-const char RS232_TEST[RS232_TEST_LENGTH+1/* \0 */] =
-"0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz";
-
+const char RS232_TEST[RS232_TEST_LENGTH+1/* \0 */] = "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz";
 
 //-----------------------------------------------------------------------------
 
@@ -397,7 +399,6 @@ void SysTick_Handler(void)
 //=============================================================================
 int main (void)
 {
-  size_t CharSentCount, RemainingCharCount = 0;
   eERRORRESULT Error;
   wdt_disable(WDT);
 
@@ -419,6 +420,13 @@ int main (void)
   ioport_disable_pin(SPI0_MOSI_GPIO);
   ioport_set_pin_mode(SPI0_MISO_GPIO, SPI0_MISO_FLAGS);
   ioport_disable_pin(SPI0_MISO_GPIO);
+  
+  ioport_set_pin_dir(EXT1_PIN_IRQ, IOPORT_DIR_INPUT);
+  ioport_set_pin_mode(EXT1_PIN_IRQ, IOPORT_MODE_PULLUP);
+  ioport_set_pin_sense_mode(EXT1_PIN_IRQ, IOPORT_SENSE_FALLING);
+  ioport_set_pin_dir(EXT2_PIN_IRQ, IOPORT_DIR_INPUT);
+  ioport_set_pin_mode(EXT2_PIN_IRQ, IOPORT_MODE_PULLUP);
+  ioport_set_pin_sense_mode(EXT2_PIN_IRQ, IOPORT_SENSE_FALLING);
 
   //--- Initialize the console UART ---------------------
   InitConsoleTx(CONSOLE_TX);
@@ -556,17 +564,83 @@ int main (void)
 
 
 
+  size_t CharSentCount, RemainingCharCount = 0, ReceivedCharCount = 0;
+  eSC16IS7XX_InterruptSource LastInterruptFlag;
+  uint8_t LastCharError;
+  bool IsIntPending;
 
-  //=== Tests ===
+  //=== Test RS-232 (no interrupts) ===
   CurrentCharToSend = 0;
-  while (CurrentCharToSend < RS232_TEST_LENGTH)
+  CurrentCharReceived = 0;
+  while ((CurrentCharToSend < RS232_TEST_LENGTH) || (CurrentCharReceived < RS232_TEST_LENGTH))
   {
+    //--- Send data ---
     RemainingCharCount = RS232_TEST_LENGTH - CurrentCharToSend;
-    Error = SC16IS7XX_TryTransmitData(UART0_EXT2, (uint8_t*)&RS232_TEST[CurrentCharToSend], RemainingCharCount, &CharSentCount);
-    if (Error != ERR_OK) { ShowError(Error); break; }
-    CurrentCharToSend += CharSentCount;
-  }
+    if (RemainingCharCount > 0)
+    {
+      Error = SC16IS7XX_TransmitData(UART0_EXT2, (uint8_t*)&RS232_TEST[CurrentCharToSend], RemainingCharCount, &CharSentCount);
+      if (Error != ERR_OK) { ShowError(Error); break; }
+      CurrentCharToSend += CharSentCount;
+    }
 
+    //--- Receive data ---
+    Error = SC16IS7XX_ReceiveData(UART1_EXT2, (uint8_t*)&RxBufferTests[CurrentCharReceived], TEST_RECEIVE_BUFFER_LENGTH - CurrentCharReceived, &ReceivedCharCount, &LastCharError);
+    if (Error != ERR_OK)
+    {
+      ShowError(Error);
+      if (Error == ERR__RECEIVE_ERROR) LOGERROR("  Last char error: %u", (unsigned int)LastCharError);
+      break;
+    }
+    CurrentCharReceived += ReceivedCharCount;
+  }
+  if (strncmp(&RS232_TEST[0], &RxBufferTests[0], RS232_TEST_LENGTH) != 0)
+       LOGERROR("RS-232 basic test (no interrupts) FAILED!");
+  else LOGSPECIAL("RS-232 basic test (no interrupts) success");
+
+
+  //=== Test RS-232 (with interrupts) ===
+  CurrentCharToSend = 0;
+  CurrentCharReceived = 0;
+  while ((CurrentCharToSend < RS232_TEST_LENGTH) || (CurrentCharReceived < RS232_TEST_LENGTH))
+  {
+    if (ioport_get_pin_level(EXT2_PIN_IRQ) == 0)                                           // Check INT pin status of the SC16IS752
+    {
+      //--- Send data ---
+      Error = SC16IS7XX_GetInterruptEvents(UART0_EXT2, &IsIntPending, &LastInterruptFlag); // Get interrupts UART0
+      if (Error != ERR_OK) { ShowError(Error); break; }
+      if (IsIntPending && ((LastInterruptFlag & SC16IS7XX_THR_INTERRUPT) > 0))             // Check THR
+      {
+        RemainingCharCount = RS232_TEST_LENGTH - CurrentCharToSend;
+        if (RemainingCharCount > 0)
+        {
+          Error = SC16IS7XX_TransmitData(UART0_EXT2, (uint8_t*)&RS232_TEST[CurrentCharToSend], RemainingCharCount, &CharSentCount);
+          if (Error != ERR_OK) { ShowError(Error); break; }
+          CurrentCharToSend += CharSentCount;
+        }
+      }
+    }
+
+    if (ioport_get_pin_level(EXT2_PIN_IRQ) == 0)                                           // Check INT pin status of the SC16IS752
+    {
+      //--- Receive data ---
+      Error = SC16IS7XX_GetInterruptEvents(UART1_EXT2, &IsIntPending, &LastInterruptFlag); // Get interrupts UART1
+      if (Error != ERR_OK) { ShowError(Error); break; }
+      if (IsIntPending && ((LastInterruptFlag & SC16IS7XX_RHR_INTERRUPT) > 0))             // Check RHR
+      {
+        Error = SC16IS7XX_ReceiveData(UART1_EXT2, (uint8_t*)&RxBufferTests[CurrentCharReceived], TEST_RECEIVE_BUFFER_LENGTH - CurrentCharReceived, &ReceivedCharCount, &LastCharError);
+        if (Error != ERR_OK)
+        {
+          ShowError(Error);
+          if (Error == ERR__RECEIVE_ERROR) LOGERROR("  Last char error: %u", (unsigned int)LastCharError);
+          break;
+        }
+        CurrentCharReceived += ReceivedCharCount;
+      }
+    }
+  }
+  if (strncmp(&RS232_TEST[0], &RxBufferTests[0], RS232_TEST_LENGTH) != 0)
+       LOGERROR("RS-232 basic test (with interrupts) FAILED!");
+  else LOGSPECIAL("RS-232 basic test (with interrupts) success");
 
 
 
