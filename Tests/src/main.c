@@ -2,9 +2,10 @@
  * Hardware setup:
  *
  * 1) Plug the mikroBus Xplained Pro adapter board into connector EXT1 of the SAM V71 Xplained Ultra evaluation kit.
- * 2) Plug a UART I2C/SPI click into adapter board (configured in SPI).
+ * 2) Plug a UART I2C/SPI click into adapter board (configured in SPI) into adapter board.
  * 3) Plug the mikroBus Xplained Pro adapter board into connector EXT2 of the SAM V71 Xplained Ultra evaluation kit.
- * 4) Plug a  click into adapter board.
+ * 4) Connect with wires a iHaospace SC16IS752 module board (configured in SPI).
+ * 5) Connect with wires a DollaTek SC16IS750 module board (configured in I2C).
  * 6) Power SAM V71 Xplained by connecting a USB cable to the DEBUG connector and plugging it into your PC.
  */
 //=============================================================================
@@ -56,8 +57,10 @@ static size_t CurrentCharReceived = 0;
 static char RxBufferTests[TEST_RECEIVE_BUFFER_LENGTH];
 
 // Test strings
-#define RS232_TEST_LENGTH  64
-const char RS232_TEST[RS232_TEST_LENGTH+1/* \0 */] = "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz";
+//#define RS232_TEST_LENGTH  131
+//const char RS232_TEST[RS232_TEST_LENGTH+1/* \0 */] = "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz ! zyxwvutsrqponmlkjihgfedcba ZYXWVUTSRQPONMLKJIHGFEDCBA 9876543210";
+#define RS232_TEST_LENGTH  77
+const char RS232_TEST[RS232_TEST_LENGTH+1/* \0 */] = "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz ! 9876543210";
 
 //-----------------------------------------------------------------------------
 
@@ -394,6 +397,84 @@ void SysTick_Handler(void)
 
 
 
+
+
+//=============================================================================
+// Check SC16IS7XX device's IRQ on EXT1
+//=============================================================================
+static void SC16IS7XX_EXT1_CheckIRQ(SC16IS7XX_UART *pUART)
+{
+  eERRORRESULT Error;
+
+#ifdef APP_USE_IRQ_PIN
+  if (ioport_get_pin_level(EXT1_PIN_IRQ) != 0) return;             // Check IRQ pin status of the SC16IS7XX (Active low state)
+
+  eSC16IS7XX_InterruptSource LastInterruptFlag;
+  Error = SC16IS7XX_GetInterruptEvents(pUART, &LastInterruptFlag); // Get UART interrupts
+  if (Error != ERR_OK) { ShowError(Error); return; }
+  
+  switch (LastInterruptFlag)
+  {
+    case SC16IS7XX_RECEIVER_LINE_STATUS:       //*** Receive Line Status error
+      // Overrun Error, Framing Error, Parity Error, or Break Interrupt errors occur in characters in the Rx FIFO. Read all Rx FIFO data to recover
+      break;
+    case SC16IS7XX_RECEIVER_TIMEOUT:           //*** Receiver time-out interrupt
+      // Stale data in RX FIFO. Read remaining Rx FIFO data to recover
+      break;
+    case SC16IS7XX_RHR_INTERRUPT:              //*** RHR interrupt
+      // There are characters available in the Rx FIFO. Follows the SC16IS7XX_UARTconfig.RxTrigLvl configuration
+      break;
+    case SC16IS7XX_THR_INTERRUPT:              //*** THR interrupt
+      // There is space in the Tx FIFO. Follows the SC16IS7XX_UARTconfig.TxTrigLvl configuration
+      break;
+
+    case SC16IS7XX_MODEM_INTERRUPT:            //*** Modem interrupt
+      // Get the modem's pin status with SC16IS7XX_GetControlPinStatus()
+      break;
+    case SC16IS7XX_INPUT_PIN_CHANGE_STATE:     //*** Input pin change of state
+      // Get the Inputs pin status with SC16IS7XX_GetGPIOPinsInputLevel()
+      break;
+    case SC16IS7XX_RECEIVED_XOFF_SIGNAL:       //*** Received Xoff signal/special character
+      // This can be used in case of manual software control flow
+      break;
+    case SC16IS7XX_CTS_RTS_CHANGE_LOW_TO_HIGH: //*** CTS, RTS change of state from active (LOW) to inactive (HIGH)
+      // This can be used in case of manual hardware control flow
+      break;
+
+    default:
+      LOGERROR("Unknown IRQ: %u", (unsigned int)LastInterruptFlag);
+      break;
+  }
+#else
+  setSC16IS7XX_Status Status = 0;
+  Error = SC16IS7XX_GetUARTstatus(UART0_I2C, &Status); // Get the current status
+  if (Error != ERR_OK) { ShowError(Error); return; }
+  if (Status == SC16IS7XX_NO_CURRENT_STATUS) return;
+
+  if ((Status & SC16IS7XX_DATA_IN_RX_FIFO) > 0)        // Data in receiver
+  {
+    // At least one character in the RX FIFO
+  }
+  if ((Status & SC16IS7XX_THR_EMPTY) > 0)              // THR empty
+  {
+    // Transmit Hold Register is empty. The host can now load up to 64 characters of data into the THR if the Tx FIFO is enabled
+  }
+  if ((Status & SC16IS7XX_THR_AND_TSR_EMPTY) > 0)      // THR and TSR empty
+  {
+    // Transmitter hold and shift registers are empty. Can be used to check the end of data transfer
+  }
+  if ((Status & SC16IS7XX_FIFO_DATA_ERROR) > 0)        // FIFO data error
+  {
+    // At least one parity error, framing error, or break indication is in the receiver FIFO. This bit is cleared when no more errors are present in the FIFO
+  }
+#endif
+}
+  
+
+
+
+
+
 //=============================================================================
 // Main
 //=============================================================================
@@ -450,7 +531,7 @@ int main (void)
   }
 
   //--- Configure SC16IS740 on EXT1 --------------------------------
-  Error = Init_SC16IS7XX(SC16IS740_EXT1, &SC16IS7XX_EXT1_Config);
+  Error = Init_SC16IS7XX(SC16IS740_EXT1, NULL);
   if (Error == ERR_OK)
   {
     LOGTRACE("Device SC16IS740 detected, 1 new UART channel available");
@@ -463,7 +544,11 @@ int main (void)
       UARTsPresent[0] = false;
       ShowError(Error);
     }
-    else UARTsPresent[0] = true;
+    else
+    {
+      UARTsPresent[0] = true;
+      LOGDEBUG("  UART0_EXT1 baudrate error: %d", (int)Baudrate_UART0_EXT1);
+    }      
   }
   else
   {
@@ -480,6 +565,7 @@ int main (void)
     LOGTRACE("Device SC16IS750 detected, 1 new UART channel available");
     DevicesPresent[1] = true;
     ioport_set_pin_level(LED0_GPIO, LED0_INACTIVE_LEVEL);
+    delay_ms(1);
 
     Error = SC16IS7XX_InitUART(UART0_I2C, &UART0_I2C_RS232config);
     if (Error != ERR_OK)
@@ -487,7 +573,11 @@ int main (void)
       UARTsPresent[1] = false;
       ShowError(Error);
     }
-    else UARTsPresent[1] = true;
+    else
+    {
+      UARTsPresent[1] = true;
+      LOGDEBUG("  UART0_I2C baudrate error: %d", (int)Baudrate_UART0_I2C);
+    }
   }
   else
   {
@@ -511,14 +601,26 @@ int main (void)
       UARTsPresent[2] = false;
       ShowError(Error);
     }
-    else UARTsPresent[2] = true;
+    else
+    {
+      UARTsPresent[2] = true;
+      LOGDEBUG("  UART0_EXT2 baudrate error: %d", (int)Baudrate_UART_EXT2);
+    }
+
+    delay_ms(1);
+
+    UART_EXT2_RS232config.Interrupts = 0;
     Error = SC16IS7XX_InitUART(UART1_EXT2, &UART_EXT2_RS232config);
     if (Error != ERR_OK)
     {
       UARTsPresent[3] = false;
       ShowError(Error);
     }
-    else UARTsPresent[3] = true;
+    else
+    {
+      UARTsPresent[3] = true;
+      LOGDEBUG("  UART1_EXT2 baudrate error: %d", (int)Baudrate_UART_EXT2);
+    }
   }
   else
   {
@@ -567,83 +669,84 @@ int main (void)
   size_t CharSentCount, RemainingCharCount = 0, ReceivedCharCount = 0;
   eSC16IS7XX_InterruptSource LastInterruptFlag;
   uint8_t LastCharError;
-  bool IsIntPending;
 
-  //=== Test RS-232 (no interrupts) ===
-  CurrentCharToSend = 0;
-  CurrentCharReceived = 0;
-  while ((CurrentCharToSend < RS232_TEST_LENGTH) || (CurrentCharReceived < RS232_TEST_LENGTH))
+  if (UARTsPresent[2] && UARTsPresent[3])
   {
-    //--- Send data ---
-    RemainingCharCount = RS232_TEST_LENGTH - CurrentCharToSend;
-    if (RemainingCharCount > 0)
-    {
-      Error = SC16IS7XX_TransmitData(UART0_EXT2, (uint8_t*)&RS232_TEST[CurrentCharToSend], RemainingCharCount, &CharSentCount);
-      if (Error != ERR_OK) { ShowError(Error); break; }
-      CurrentCharToSend += CharSentCount;
-    }
-
-    //--- Receive data ---
-    Error = SC16IS7XX_ReceiveData(UART1_EXT2, (uint8_t*)&RxBufferTests[CurrentCharReceived], TEST_RECEIVE_BUFFER_LENGTH - CurrentCharReceived, &ReceivedCharCount, &LastCharError);
-    if (Error != ERR_OK)
-    {
-      ShowError(Error);
-      if (Error == ERR__RECEIVE_ERROR) LOGERROR("  Last char error: %u", (unsigned int)LastCharError);
-      break;
-    }
-    CurrentCharReceived += ReceivedCharCount;
-  }
-  if (strncmp(&RS232_TEST[0], &RxBufferTests[0], RS232_TEST_LENGTH) != 0)
-       LOGERROR("RS-232 basic test (no interrupts) FAILED!");
-  else LOGSPECIAL("RS-232 basic test (no interrupts) success");
-
-
-  //=== Test RS-232 (with interrupts) ===
-  CurrentCharToSend = 0;
-  CurrentCharReceived = 0;
-  while ((CurrentCharToSend < RS232_TEST_LENGTH) || (CurrentCharReceived < RS232_TEST_LENGTH))
-  {
-    if (ioport_get_pin_level(EXT2_PIN_IRQ) == 0)                                           // Check INT pin status of the SC16IS752
+    //=== Test RS-232 (no interrupts) ===
+    CurrentCharToSend = 0;
+    CurrentCharReceived = 0;
+    while ((CurrentCharToSend < RS232_TEST_LENGTH) || (CurrentCharReceived < RS232_TEST_LENGTH))
     {
       //--- Send data ---
-      Error = SC16IS7XX_GetInterruptEvents(UART0_EXT2, &IsIntPending, &LastInterruptFlag); // Get interrupts UART0
-      if (Error != ERR_OK) { ShowError(Error); break; }
-      if (IsIntPending && ((LastInterruptFlag & SC16IS7XX_THR_INTERRUPT) > 0))             // Check THR
+      RemainingCharCount = RS232_TEST_LENGTH - CurrentCharToSend;
+      if (RemainingCharCount > 0)
       {
-        RemainingCharCount = RS232_TEST_LENGTH - CurrentCharToSend;
-        if (RemainingCharCount > 0)
-        {
-          Error = SC16IS7XX_TransmitData(UART0_EXT2, (uint8_t*)&RS232_TEST[CurrentCharToSend], RemainingCharCount, &CharSentCount);
-          if (Error != ERR_OK) { ShowError(Error); break; }
-          CurrentCharToSend += CharSentCount;
-        }
+        Error = SC16IS7XX_TransmitData(UART0_EXT2, (uint8_t*)&RS232_TEST[CurrentCharToSend], RemainingCharCount, &CharSentCount);
+        if (Error != ERR_OK) { ShowError(Error); break; }
+        CurrentCharToSend += CharSentCount;
       }
-    }
 
-    if (ioport_get_pin_level(EXT2_PIN_IRQ) == 0)                                           // Check INT pin status of the SC16IS752
-    {
       //--- Receive data ---
-      Error = SC16IS7XX_GetInterruptEvents(UART1_EXT2, &IsIntPending, &LastInterruptFlag); // Get interrupts UART1
-      if (Error != ERR_OK) { ShowError(Error); break; }
-      if (IsIntPending && ((LastInterruptFlag & SC16IS7XX_RHR_INTERRUPT) > 0))             // Check RHR
+      Error = SC16IS7XX_ReceiveData(UART1_EXT2, (uint8_t*)&RxBufferTests[CurrentCharReceived], TEST_RECEIVE_BUFFER_LENGTH - CurrentCharReceived, &ReceivedCharCount, &LastCharError);
+      if (Error != ERR_OK)
       {
-        Error = SC16IS7XX_ReceiveData(UART1_EXT2, (uint8_t*)&RxBufferTests[CurrentCharReceived], TEST_RECEIVE_BUFFER_LENGTH - CurrentCharReceived, &ReceivedCharCount, &LastCharError);
-        if (Error != ERR_OK)
+        ShowError(Error);
+        if (Error == ERR__RECEIVE_ERROR) LOGERROR("  Last char error: %u", (unsigned int)LastCharError);
+        break;
+      }
+      CurrentCharReceived += ReceivedCharCount;
+    }
+    if (strncmp(&RS232_TEST[0], &RxBufferTests[0], RS232_TEST_LENGTH) != 0)
+         LOGERROR("RS-232 basic test (no interrupts) FAILED!");
+    else LOGSPECIAL("RS-232 basic test (no interrupts) success"); //*/
+  }  
+
+  //=== Test RS-232 (with interrupts) ===
+  if (UARTsPresent[2] && UARTsPresent[3])
+  {
+    CurrentCharToSend = 0;
+    CurrentCharReceived = 0;
+    while ((CurrentCharToSend < RS232_TEST_LENGTH) || (CurrentCharReceived < RS232_TEST_LENGTH))
+    {
+      if (ioport_get_pin_level(EXT2_PIN_IRQ) == 0)                            // Check IRQ pin status of the SC16IS752
+      {
+        //--- Send data ---
+        Error = SC16IS7XX_GetInterruptEvents(UART0_EXT2, &LastInterruptFlag); // Get interrupts UART0
+        if (Error != ERR_OK) { ShowError(Error); break; }
+        if (LastInterruptFlag == SC16IS7XX_THR_INTERRUPT)                     // Check THR
         {
-          ShowError(Error);
-          if (Error == ERR__RECEIVE_ERROR) LOGERROR("  Last char error: %u", (unsigned int)LastCharError);
-          break;
+          RemainingCharCount = RS232_TEST_LENGTH - CurrentCharToSend;
+          if (RemainingCharCount > 0)
+          {
+            Error = SC16IS7XX_TransmitData(UART0_EXT2, (uint8_t*)&RS232_TEST[CurrentCharToSend], RemainingCharCount, &CharSentCount);
+            if (Error != ERR_OK) { ShowError(Error); break; }
+            CurrentCharToSend += CharSentCount;
+          }
         }
-        CurrentCharReceived += ReceivedCharCount;
+      }
+
+      if (ioport_get_pin_level(EXT2_PIN_IRQ) == 0)                            // Check IRQ pin status of the SC16IS752
+      {
+        //--- Receive data ---
+        Error = SC16IS7XX_GetInterruptEvents(UART1_EXT2, &LastInterruptFlag); // Get interrupts UART1
+        if (Error != ERR_OK) { ShowError(Error); break; }
+        if (LastInterruptFlag == SC16IS7XX_RHR_INTERRUPT)                     // Check RHR
+        {
+          Error = SC16IS7XX_ReceiveData(UART1_EXT2, (uint8_t*)&RxBufferTests[CurrentCharReceived], TEST_RECEIVE_BUFFER_LENGTH - CurrentCharReceived, &ReceivedCharCount, &LastCharError);
+          if (Error != ERR_OK)
+          {
+            ShowError(Error);
+            if (Error == ERR__RECEIVE_ERROR) LOGERROR("  Last char error: %u", (unsigned int)LastCharError);
+            break;
+          }
+          CurrentCharReceived += ReceivedCharCount;
+        }
       }
     }
+    if (strncmp(&RS232_TEST[0], &RxBufferTests[0], RS232_TEST_LENGTH) != 0)
+         LOGERROR("RS-232 basic test (with interrupts) FAILED!");
+    else LOGSPECIAL("RS-232 basic test (with interrupts) success"); //*/
   }
-  if (strncmp(&RS232_TEST[0], &RxBufferTests[0], RS232_TEST_LENGTH) != 0)
-       LOGERROR("RS-232 basic test (with interrupts) FAILED!");
-  else LOGSPECIAL("RS-232 basic test (with interrupts) success");
-
-
-
 
   //=== The main loop ===================================
   while(1)
@@ -655,8 +758,53 @@ int main (void)
     ProcessCommand();
 
     //=== Tests ===
+    CurrentCharToSend = 0;
+    CurrentCharReceived = 0;
+    while ((CurrentCharToSend < RS232_TEST_LENGTH) || (CurrentCharReceived < RS232_TEST_LENGTH))
+    {
+      TrySendingNextCharToConsole(CONSOLE_TX);
 
+
+      if (ioport_get_pin_level(EXT1_PIN_IRQ) == 0)                           // Check EXT1 IRQ pin status
+      {
+        //--- Send data ---
+        Error = SC16IS7XX_GetInterruptEvents(UART0_I2C, &LastInterruptFlag); // Get interrupts UART0
+        if (Error != ERR_OK) { ShowError(Error); break; }
+//        LOGDEBUG("Int Flag: %u", (unsigned int)LastInterruptFlag);
+        if (LastInterruptFlag == SC16IS7XX_THR_INTERRUPT)                    // Check THR
+        {
+          RemainingCharCount = RS232_TEST_LENGTH - CurrentCharToSend;
+          if (RemainingCharCount > 0)
+          {
+            if (RemainingCharCount > 50) RemainingCharCount = 50;
+            Error = SC16IS7XX_TransmitData(UART0_I2C, (uint8_t*)&RS232_TEST[CurrentCharToSend], RemainingCharCount, &CharSentCount);
+            if (Error != ERR_OK) { ShowError(Error); break; }
+            CurrentCharToSend += CharSentCount;
+          }
+        }
+      }
+
+      if (ioport_get_pin_level(EXT2_PIN_IRQ) == 0)                                                               // Check IRQ pin status of the SC16IS752
+      {
+        //--- Receive data ---
+        Error = SC16IS7XX_GetInterruptEvents(UART0_EXT2, &LastInterruptFlag);                                    // Get interrupts UART1
+        if (Error != ERR_OK) { ShowError(Error); break; }
+        if ((LastInterruptFlag == SC16IS7XX_RHR_INTERRUPT) || (LastInterruptFlag == SC16IS7XX_RECEIVER_TIMEOUT)) // Check RHR and Rx Time-out
+        {
+          Error = SC16IS7XX_ReceiveData(UART0_EXT2, (uint8_t*)&RxBufferTests[CurrentCharReceived], TEST_RECEIVE_BUFFER_LENGTH - CurrentCharReceived, &ReceivedCharCount, &LastCharError);
+          if (Error != ERR_OK)
+          {
+            ShowError(Error);
+            if (Error == ERR__RECEIVE_ERROR) LOGERROR("  Last char error: %u", (unsigned int)LastCharError);
+            break;
+          }
+          CurrentCharReceived += ReceivedCharCount;
+        }
+      }
+    }
+    //if (strncmp(&RS232_TEST[0], &RxBufferTests[0], RS232_TEST_LENGTH) != 0) LOGERROR("RS-232 basic test (with interrupts) FAILED!"); //*/
 
     nop();
+    while (true) TrySendingNextCharToConsole(CONSOLE_TX);
   }
 }

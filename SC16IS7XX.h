@@ -41,6 +41,7 @@
 
 /* Revision history:
  * 1.0.1    I2C interface rework for I2C DMA use and polling
+ *          Add Tx and Rx ring buffers
  * 1.0.0    Release version
  *****************************************************************************/
 #ifndef SC16IS7XX_H_INC
@@ -105,12 +106,6 @@
 #define SC16IS7XX_I2C_CLOCK_MAX   (   400000u ) //! Max I2C clock frequency
 #define SC16IS7XX_SPI_CLOCK_MAX   (  4000000u ) //! Max SPI clock frequency for SC16IS740/741/750/752
 #define SC16IS76X_SPI_CLOCK_MAX   ( 15000000u ) //! Max SPI clock frequency for SC16IS760/762
-
-
-
-// Device I2C definitions
-#define SC16IS7XX_CHIPADDRESS_BASE  ( 0xE0u ) //!< SC16IS7XX chip base address
-#define SC16IS7XX_CHIPADDRESS_MASK  ( 0xF0u ) //!< SC16IS7XX chip base address
 
 
 
@@ -378,18 +373,18 @@ SC16IS7XX_CONTROL_ITEM_SIZE(SC16IS7XX_IIR_Register, 1);
 //! 5-bit encoded interrupt source for the IIR register
 typedef enum
 {
-  SC16IS7XX_RECEIVER_LINE_STATUS       = 0b00011, //!< Receiver Line Status error
-  SC16IS7XX_RECEIVER_TIMEOUT           = 0b00110, //!< Receiver time-out interrupt
-  SC16IS7XX_RHR_INTERRUPT              = 0b00010, //!< RHR interrupt
-  SC16IS7XX_THR_INTERRUPT              = 0b00001, //!< THR interrupt
-  SC16IS7XX_MODEM_INTERRUPT            = 0b00000, //!< Modem interrupt
-  SC16IS7XX_INPUT_PIN_CHANGE_STATE     = 0b11000, //!< Input pin change of state
-  SC16IS7XX_RECEIVED_XOFF_SIGNAL       = 0b01000, //!< Received Xoff signal/special character
-  SC16IS7XX_CTS_RTS_CHANGE_LOW_TO_HIGH = 0b10000, //!< CTS, RTS change of state from active (LOW) to inactive (HIGH)
+  SC16IS7XX_RECEIVER_LINE_STATUS       = 0b000110, //!< Receiver Line Status error
+  SC16IS7XX_RECEIVER_TIMEOUT           = 0b001100, //!< Receiver time-out interrupt
+  SC16IS7XX_RHR_INTERRUPT              = 0b000100, //!< RHR interrupt
+  SC16IS7XX_THR_INTERRUPT              = 0b000010, //!< THR interrupt
+  SC16IS7XX_MODEM_INTERRUPT            = 0b000000, //!< Modem interrupt
+  SC16IS7XX_INPUT_PIN_CHANGE_STATE     = 0b110000, //!< Input pin change of state
+  SC16IS7XX_RECEIVED_XOFF_SIGNAL       = 0b010000, //!< Received Xoff signal/special character
+  SC16IS7XX_CTS_RTS_CHANGE_LOW_TO_HIGH = 0b100000, //!< CTS, RTS change of state from active (LOW) to inactive (HIGH)
 } eSC16IS7XX_InterruptSource;
 
-#define SC16IS7XX_IIR_INTERRUT_SOURCE_Pos         1
-#define SC16IS7XX_IIR_INTERRUT_SOURCE_Mask        (0x1Fu << SC16IS7XX_IIR_INTERRUT_SOURCE_Pos)
+#define SC16IS7XX_IIR_INTERRUT_SOURCE_Pos         0
+#define SC16IS7XX_IIR_INTERRUT_SOURCE_Mask        (0x3Fu << SC16IS7XX_IIR_INTERRUT_SOURCE_Pos)
 #define SC16IS7XX_IIR_INTERRUT_SOURCE_SET(value)  (((uint8_t)(value) << SC16IS7XX_IIR_INTERRUT_SOURCE_Pos) & SC16IS7XX_IIR_INTERRUT_SOURCE_Mask) //!< Set interrupt source
 #define SC16IS7XX_IIR_INTERRUT_SOURCE_GET(value)  (((uint8_t)(value) & SC16IS7XX_IIR_INTERRUT_SOURCE_Mask) >> SC16IS7XX_IIR_INTERRUT_SOURCE_Pos) //!< Get interrupt source
 #define SC16IS7XX_IIR_FIFOs_ARE_ENABLE            (0x3u << 6) //!< FIFOs (Transmit and receive) are enable ; mirror the contents of FCR[0]
@@ -549,8 +544,9 @@ SC16IS7XX_CONTROL_ITEM_SIZE(SC16IS7XX_LSR_Register, 1);
 #define SC16IS7XX_LSR_NO_ERROR               (0x0u << 7) //!< No FIFO data error
 
 #define SC16IS7XX_LSR_DATA_RECEIVE_ERROR_Mask  ( SC16IS7XX_LSR_FIFO_DATA_ERROR | SC16IS7XX_LSR_BREAK_CONDITION_OCCUR | SC16IS7XX_LSR_FRAMING_ERROR | SC16IS7XX_LSR_PARITY_ERROR | SC16IS7XX_LSR_OVERRUN_ERROR ) //!< At least one parity error, framing error, overrun, or break indication is in the receiver FIFO
+#define SC16IS7XX_IS_THR_AND_TSR_EMPTY(value)  ( ((value) && SC16IS7XX_LSR_THR_AND_TSR_EMPTY) > 0 ) //! Are the THR and TSR empty?
 
-// Data receive error enum
+//! Data receive error enum
 typedef enum
 {
   SC16IS7XX_NO_RX_ERROR   = 0x00,                                //!< No error on the last character received
@@ -563,6 +559,20 @@ typedef enum
 } eSC16IS7XX_ReceiveError;
 
 typedef eSC16IS7XX_ReceiveError setSC16IS7XX_ReceiveError; //! Set of receive errors (can be OR'ed)
+
+//! UART status enum
+typedef enum
+{
+  SC16IS7XX_NO_CURRENT_STATUS = 0x00,                            //!< No current status
+  SC16IS7XX_DATA_IN_RX_FIFO   = SC16IS7XX_LSR_DATA_IN_RX_FIFO,   //!< At least one character in the RX FIFO
+  SC16IS7XX_THR_EMPTY         = SC16IS7XX_LSR_THR_EMPTY,         //!< Transmit Hold Register is empty. The host can now load up to 64 characters of data into the THR if the TX FIFO is enabled
+  SC16IS7XX_THR_AND_TSR_EMPTY = SC16IS7XX_LSR_THR_AND_TSR_EMPTY, //!< Transmitter hold and shift registers are empty
+  SC16IS7XX_FIFO_DATA_ERROR   = SC16IS7XX_LSR_FIFO_DATA_ERROR,   //!< At least one parity error, framing error, or break indication is in the receiver FIFO. This bit is cleared when no more errors are present in the FIFO
+
+  SC16IS7XX_STATUS_Mask       = ( SC16IS7XX_FIFO_DATA_ERROR | SC16IS7XX_THR_AND_TSR_EMPTY | SC16IS7XX_THR_EMPTY | SC16IS7XX_DATA_IN_RX_FIFO )
+} eSC16IS7XX_Status;
+
+typedef eSC16IS7XX_Status setSC16IS7XX_Status; //! Set of UART status (can be OR'ed)
 
 //-----------------------------------------------------------------------------
 
@@ -848,6 +858,8 @@ typedef enum
 #define SC16IS7XX_EFR_CTS_FLOW_CONTROL_ENABLE       (0x1u << 7) //!< CTS flow control is enabled. Transmission will stop when a HIGH signal is detected on the CTS pin
 #define SC16IS7XX_EFR_CTS_FLOW_CONTROL_DISABLE      (0x0u << 7) //!< CTS flow control is disabled
 
+#define SC16IS7XX_IS_SOFT_CONTROL_FLOW_USES_XOFF2(value)  ( (((uint8_t)(value) & 0x02) > 0) || (((uint8_t)(value) & 0x08) > 0) ) //!< Is the software control flow uses Xoff2 char?
+
 #define SC16IS7XX_EFR_ENHANCED_FUNCTION_Mask        (0x1u << 4) //!< Bitmask for the enhanced function
 #define SC16IS7XX_EFR_SPECIAL_CHAR_DETECT_Mask      (0x1u << 5) //!< Bitmask for the special character detect
 
@@ -928,8 +940,10 @@ typedef enum
 //********************************************************************************************************************
 // SC16IS7XX Driver API
 //********************************************************************************************************************
-typedef struct SC16IS7XX SC16IS7XX; //! SC16IS7XX component object structure
 
+
+
+typedef struct SC16IS7XX SC16IS7XX; //! SC16IS7XX component object structure
 
 
 //! SC16IS7XX device object structure
@@ -943,22 +957,31 @@ struct SC16IS7XX
 
   //--- Interface driver call functions ---
   eSC16IS7XX_Interface Interface; //!< Interface to use with this device
+  union
+  {
 #ifdef SC16IS7XX_I2C_DEFINED
-  uint8_t I2Caddress;             //!< Address I2C of the device (0x90 to 0xAE). Use defines SC16IS7XX_ADDRESS_A1x_A0x
+    struct
+    {
+      uint8_t I2Caddress;         //!< Address I2C of the device (0x90 to 0xAE). Use defines SC16IS7XX_ADDRESS_A1x_A0x
 #  ifdef USE_DYNAMIC_INTERFACE
-  I2C_Interface* I2C;             //!< This is the I2C_Interface descriptor pointer that will be used to communicate with the device
+      I2C_Interface* I2C;         //!< This is the I2C_Interface descriptor pointer that will be used to communicate with the device
 #  else
-  I2C_Interface I2C;              //!< This is the I2C_Interface descriptor that will be used to communicate with the device
+      I2C_Interface I2C;          //!< This is the I2C_Interface descriptor that will be used to communicate with the device
 #  endif
+    };
 #endif
 #ifdef SC16IS7XX_SPI_DEFINED
-  uint8_t SPIchipSelect;          //!< This is the Chip Select index that will be set at the call of a transfer
+    struct
+    {
+      uint8_t SPIchipSelect;      //!< This is the Chip Select index that will be set at the call of a transfer
 #  ifdef USE_DYNAMIC_INTERFACE
-  SPI_Interface* SPI;             //!< This is the SPI_Interface descriptor pointer that will be used to communicate with the device
+      SPI_Interface* SPI;         //!< This is the SPI_Interface descriptor pointer that will be used to communicate with the device
 #  else
-  SPI_Interface SPI;              //!< This is the SPI_Interface descriptor that will be used to communicate with the device
+      SPI_Interface SPI;          //!< This is the SPI_Interface descriptor that will be used to communicate with the device
 #  endif
+    };
 #endif
+  };
   uint32_t InterfaceClockSpeed;   //!< SPI/I2C clock speed in Hertz
 
   //--- GPIO configuration ---
@@ -973,8 +996,8 @@ struct SC16IS7XX
 typedef struct SC16IS7XX_Config
 {
   //--- GPIOs configuration ---
-  uint8_t StartupPinsDirection; //!< Startup GPIOs direction (0 = set to '0' ; 1 = set to '1')
-  uint8_t StartupPinsLevel;     //!< Startup GPIOs output level (0 = output ; 1 = input)
+  uint8_t StartupPinsDirection; //!< Startup GPIOs direction (0 = output ; 1 = input)
+  uint8_t StartupPinsLevel;     //!< Startup GPIOs output level (0 = set to '0' ; 1 = set to '1')
   uint8_t PinsInterruptEnable;  //!< GPIOs individual Interrupt (0 = disable ; 1 = enable)
 } SC16IS7XX_Config;
 
@@ -1224,11 +1247,11 @@ typedef eSC16IS7XX_DriverConfig setSC16IS7XX_DriverConfig; //! Set of Driver con
 //! SC16IS7XX UART buffer structure
 typedef struct SC16IS7XX_Buffer
 {
-  uint8_t* pData;    //!< Pointer to a buffer (Tx or Rx). This buffer will be a ring buffer
-  size_t BufferSize; //!< Buffer size in bytes
-  size_t PosIn;      //!< Input position in the buffer. Will increment on each byte added to the buffer
-  size_t PosOut;     //!< Output position in the buffer. Will increment on each byte sent to the UART FIFO (Tx) or received by application (Rx)
-  bool IsFull;       //!< Is the buffer full?
+  uint8_t* pData;         //!< Pointer to a buffer (Tx or Rx). This buffer will be a ring buffer
+  size_t BufferSize;      //!< Buffer size in bytes
+  volatile size_t PosIn;  //!< Input position in the buffer. Will increment on each byte added to the buffer
+  volatile size_t PosOut; //!< Output position in the buffer. Will increment on each byte sent to the UART FIFO (Tx) or received by application (Rx)
+  volatile bool IsFull;   //!< Is the buffer full?
 } SC16IS7XX_Buffer;
 
 //-----------------------------------------------------------------------------
@@ -1239,7 +1262,7 @@ typedef struct SC16IS7XX_UART SC16IS7XX_UART; //! SC16IS7XX UART object structur
 
 
 /*! @brief SC16IS7XX UART object structure
- * @warning Each Channel and Device tuple should be unique. Only 1 possible tuple on SC16IS7X0 and 2 possible tuple on SC16IS7X2 devices
+ * @warning Each Channel and Device tuple should be unique. Only 1 possible tuple on SC16IS7X0 and 2 possible tuples on SC16IS7X2 devices
  */
 struct SC16IS7XX_UART
 {
@@ -1279,7 +1302,7 @@ typedef enum
 {
   SC16IS7XX_RS485_AUTO_RTS,              //!< The transmitter will control the state of the RTS pin
   SC16IS7XX_RS485_HARD_FLOW_CONTROL_RTS, //!< The logic state of the RTS pin is controlled by the hardware flow control circuitry
-  SC16IS7XX_RS485_MANUAL_EXTERNAL_RTS,   //!< The control of the RTS pin is manually or in external way
+  SC16IS7XX_RS485_MANUAL_EXTERNAL_RTS,   //!< The control of the RTS pin is manually or in an external way
 } eSC16IS7XX_RS485RTSconfig;
 
 
@@ -1306,7 +1329,7 @@ typedef enum
 //! SC16IS7XX FIFO configuration enumerator
 typedef enum
 {
-  SC16IS7XX_NO_CONTROL_FLOW      , //!< No control flow (no CTS+RTS, no Xon+Xoff)
+  SC16IS7XX_NO_CONTROL_FLOW,       //!< No control flow (no CTS+RTS, no Xon+Xoff)
   SC16IS7XX_HARDWARE_CONTROL_FLOW, //!< Hardware control flow (use CTS, RTS)
   SC16IS7XX_SOFTWARE_CONTROL_FLOW, //!< Software control flow (use Xon, Xoff, special char)
 } eSC16IS7XX_ControlFlowType;
@@ -1326,10 +1349,8 @@ typedef struct SC16IS7XX_HardControlFlow
 {
   eSC16IS7XX_TriggerCtrlLevel HoldAt;      //!< Trigger level to ask peer to hold transmission. Trigger levels is available from 0 to 60 characters with a granularity of four
   eSC16IS7XX_TriggerCtrlLevel ResumeAt;    //!< Trigger level to ask peer to resume transmission. Trigger levels is available from 0 to 60 characters with a granularity of four
-  bool UseSpecialCharOnXoff2;              //!< Use special char on Xoff2
   eSC16IS7XX_PinControlType CTSpinControl; //!< The CTS pin controls the transmitter. If 'SC16IS7XX_MANUAL_PIN_CONTROL', the user needs to read the pin manually and stop the transmission. If 'SC16IS7XX_AUTOMATIC_PIN_CONTROL', the transmitter is controlled by the state of the CTS
   eSC16IS7XX_PinControlType RTSpinControl; //!< The RTS pin is controlled by the receiver. If 'SC16IS7XX_MANUAL_PIN_CONTROL', the user needs to set the pin manually to stop the peer transmission. If 'SC16IS7XX_AUTOMATIC_PIN_CONTROL', the receiver controls the state of RTS according to HoldAt and ResumeAt value
-  uint8_t SpecialChar;                     //!< Special character to use (Xoff2). If not used by Conf, leave not configured
 } SC16IS7XX_HardControlFlow;
 
 
@@ -1338,13 +1359,12 @@ typedef struct SC16IS7XX_SoftControlFlow
 {
   eSC16IS7XX_TriggerCtrlLevel HoldAt;   //!< Trigger level to ask peer to hold transmission. Trigger levels is available from 0 to 60 characters with a granularity of four
   eSC16IS7XX_TriggerCtrlLevel ResumeAt; //!< Trigger level to ask peer to resume transmission. Trigger levels is available from 0 to 60 characters with a granularity of four
-  bool UseSpecialCharOnXoff2;           //!< Use special char on Xoff2
   eSC16IS7XX_SoftFlowCtrl Config;       //!< This is the configuration of the Software flow control
   bool XonAnyChar;                      //!< Xon on any character
   uint8_t Xon1;                         //!< Xon1 character to use. If not used by 'Config' and XonAnyChar, leave not configured
   uint8_t Xon2;                         //!< Xon2 character to use. If not used by 'Config' and XonAnyChar, leave not configured
   uint8_t Xoff1;                        //!< Xoff1 character to use. If not used by 'Config', leave not configured
-  uint8_t Xoff2SpecialChar;             //!< Xoff2/Special character to use. If not used by 'Config', leave not configured
+  uint8_t Xoff2;                        //!< Xoff2/Special character to use. If not used by 'Config', leave not configured
 } SC16IS7XX_SoftControlFlow;
 
 //-----------------------------------------------------------------------------
@@ -1412,6 +1432,8 @@ typedef struct SC16IS7XX_UARTconfig
     SC16IS7XX_IrDAconfig  IrDA;      //!< Fill this struct if UARTtype == SC16IS7XX_UART_IrDA
     SC16IS7XX_ModemConfig Modem;     //!< Fill this struct if UARTtype == SC16IS7XX_UART_Modem
   };
+  bool UseSpecialChar;               //!< Use special char on Xoff2
+  uint8_t SpecialChar;               //!< Special character to use (Xoff2). If not used by 'Config', leave not configured
   bool DisableTransmitter;           //!< Disable transmitter. UART does not send serial data out on the transmit pin, but the transmit FIFO will continue to receive data from host until full
   bool DisableReceiver;              //!< Disable receiver. UART will stop receiving data immediately once this is set to 'true', and any data in the TSR will be sent to the receive FIFO
 
@@ -1502,6 +1524,7 @@ inline eERRORRESULT SC16IS7XX_ResetRxFIFO(SC16IS7XX_UART *pUART)
 
 /*! @brief Enable/disable Transmitter and/or receiver of the SC16IS7XX UART
  *
+ * This is only possible if the UART transmitter and the UART receiver are active
  * @param[in] *pUART Is the pointed structure of the UART to be used
  * @param[in] disableTx Set to 'true' to disable the transmitter, set to 'false' to enable the transmitter
  * @param[in] disableRx Set to 'true' to disable the receiver, set to 'false' to enable the receiver
@@ -1525,11 +1548,19 @@ eERRORRESULT SC16IS7XX_ConfigureInterrupt(SC16IS7XX_UART *pUART, setSC16IS7XX_In
 /*! @brief Get interrupt event of the SC16IS7XX UART
  *
  * @param[in] *pUART Is the pointed structure of the UART to be used
- * @param[out] *intPending Indicate if an interrupt is pending. If 'false' do not take care of *interruptFlag
  * @param[out] *interruptFlag Is the return value of the interrupt event
  * @return Returns an #eERRORRESULT value enum
  */
-eERRORRESULT SC16IS7XX_GetInterruptEvents(SC16IS7XX_UART *pUART, bool *intPending, eSC16IS7XX_InterruptSource *interruptFlag);
+eERRORRESULT SC16IS7XX_GetInterruptEvents(SC16IS7XX_UART *pUART, eSC16IS7XX_InterruptSource *interruptFlag);
+
+
+/*! @brief Get status of the SC16IS7XX UART
+ *
+ * @param[in] *pUART Is the pointed structure of the UART to be used
+ * @param[out] *statusFlag Is the return value of the status flags
+ * @return Returns an #eERRORRESULT value enum
+ */
+eERRORRESULT SC16IS7XX_GetUARTstatus(SC16IS7XX_UART *pUART, setSC16IS7XX_Status *statusFlag);
 
 //-----------------------------------------------------------------------------
 
@@ -1571,14 +1602,36 @@ eERRORRESULT SC16IS7XX_TransmitData_Gen(UART_Interface *pIntDev, uint8_t *data, 
 #endif
 
 
-/*! @brief Transmit data to UART FIFO of the SC16IS7XX UART
+/*! @brief Transmit a char to UART FIFO of the SC16IS7XX UART
  *
- * If SC16IS7XX_USE_BUFFERS defined and SC16IS7XX_DRIVER_SAFE_TX set to DriverConfig and TxBuffer ≠ NULL the data will be sent using the TxBuffer
+ * If SC16IS7XX_USE_BUFFERS defined and SC16IS7XX_DRIVER_SAFE_TX set to DriverConfig and TxBuffer is not NULL the data will be sent using the TxBuffer
  * @param[in] *pUART Is the pointed structure of the UART to be used
  * @param[in] data Is the char to send to the UART transmitter through the transmit FIFO
  * @return Returns an #eERRORRESULT value enum
  */
 eERRORRESULT SC16IS7XX_TransmitChar(SC16IS7XX_UART *pUART, const char data);
+
+
+#ifdef SC16IS7XX_USE_BUFFERS
+/*! @brief Flush data from UART Tx Buffer to the FIFO of the SC16IS7XX UART
+ *
+ * This function should be called regularly as long as there are data in the Tx buffer of the driver
+ * Will do nothing if SC16IS7XX_DRIVER_SAFE_TX set to DriverConfig, or TxBuffer is NULL
+ * @warning This function does not check the end of data transmit through UART. It just tries to put data into the Tx FIFO of the SC16IS7XX device
+ * @param[in] *pUART Is the pointed structure of the UART to be used
+ * @return Returns an #eERRORRESULT value enum
+ */
+eERRORRESULT SC16IS7XX_FlushTxBufferToFIFO(SC16IS7XX_UART *pUART);
+#endif
+
+
+/*! @brief Flush all data in TxBuffer, UART FIFO and TSR empty of the SC16IS7XX UART
+ *
+ * This function is a blocking function. It does not return until the last bit of the UART transmission is sent
+ * @param[in] *pUART Is the pointed structure of the UART to be used
+ * @return Returns an #eERRORRESULT value enum
+ */
+eERRORRESULT SC16IS7XX_WaitEndTx(SC16IS7XX_UART *pUART);
 
 //-----------------------------------------------------------------------------
 
@@ -1600,9 +1653,9 @@ eERRORRESULT SC16IS7XX_ReceiveData_Gen(UART_Interface *pIntDev, uint8_t *data, s
 #endif
 
 
-/*! @brief Receive data from UART FIFO of the SC16IS7XX UART
+/*! @brief Receive a char from UART FIFO of the SC16IS7XX UART
  *
- * If SC16IS7XX_USE_BUFFERS defined and SC16IS7XX_DRIVER_BURST_RX set to DriverConfig and RxBuffer ≠ NULL the data will be received using the RxBuffer
+ * If SC16IS7XX_USE_BUFFERS defined and SC16IS7XX_DRIVER_BURST_RX set to DriverConfig and RxBuffer is not NULL the data will be received using the RxBuffer
  * @param[in] *pUART Is the pointed structure of the UART to be used
  * @param[out] *data Is where the char will be stored
  * @param[out] *charError Is the char received error. Set to 0 if no errors
@@ -1610,8 +1663,19 @@ eERRORRESULT SC16IS7XX_ReceiveData_Gen(UART_Interface *pIntDev, uint8_t *data, s
  */
 eERRORRESULT SC16IS7XX_ReceiveChar(SC16IS7XX_UART *pUART, char *data, setSC16IS7XX_ReceiveError *charError);
 
-//-----------------------------------------------------------------------------
 
+#ifdef SC16IS7XX_USE_BUFFERS
+/*! @brief Retrieve data from Rx UART FIFO of the SC16IS7XX UART to the Rx Buffer
+ *
+ * This function should be called regularly to get the data in the Rx FIFO of the SC16IS7XX device and put it into the Rx buffer of the driver
+ * Will do nothing if SC16IS7XX_USE_BUFFERS is not defined, or SC16IS7XX_DRIVER_SAFE_RX set to DriverConfig, or RxBuffer is NULL
+ * @param[in] *pUART Is the pointed structure of the UART to be used
+ * @return Returns an #eERRORRESULT value enum
+ */
+eERRORRESULT SC16IS7XX_RetrieveRxFIFOtoBuffer(SC16IS7XX_UART *pUART);
+#endif
+
+//-----------------------------------------------------------------------------
 
 
 /*! @brief Get control pins (CD, RI, DSR, CTS) status of the SC16IS7XX UART

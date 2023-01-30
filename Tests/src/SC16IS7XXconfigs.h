@@ -67,7 +67,7 @@ extern struct SC16IS7XX_UART UART_Chan0_EXT1;
 //extern struct UART_Interface UART_Int0_EXT1;
 #define UART0_EXT1  &UART_Chan0_EXT1
 
-extern int32_t Baudrate_UART0_Ext1;
+extern int32_t Baudrate_UART0_EXT1;
 extern SC16IS7XX_UARTconfig UART0_EXT1_RS232config;
 //-----------------------------------------------------------------------------
 
@@ -113,7 +113,7 @@ extern struct SC16IS7XX_UART UART_Chan1_EXT2;
 //extern struct UART_Interface UART_Int1_EXT2;
 #define UART1_EXT2  &UART_Chan1_EXT2
 //-----------------------------------------------------------------------------
-extern int32_t Baudrate_UART_Ext2;
+extern int32_t Baudrate_UART_EXT2;
 extern SC16IS7XX_UARTconfig UART_EXT2_RS232config;
 //-----------------------------------------------------------------------------
 

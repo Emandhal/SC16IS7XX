@@ -66,7 +66,7 @@ static eERRORRESULT __SC16IS7XX_ReadData(SC16IS7XX *pComp, const eSC16IS7XX_Chan
 static eERRORRESULT __SC16IS7XX_WriteData(SC16IS7XX *pComp, const eSC16IS7XX_Channel channel, const uint8_t address, uint8_t *data, uint8_t size);
 //-----------------------------------------------------------------------------
 // DO NOT USE DIRECTLY, use SC16IS7XX_InitUART() instead! Control Flow needs to be configured with a safe UART configuration to avoid spurious effects, which is done in the SC16IS7XX_InitUART() function
-static eERRORRESULT __SC16IS7XX_SetControlFlowConfiguration(SC16IS7XX_UART *pUART, SC16IS7XX_HardControlFlow *pHardFlow, SC16IS7XX_SoftControlFlow *pSoftFlow, bool useAdressChar);
+static eERRORRESULT __SC16IS7XX_SetControlFlowConfiguration(SC16IS7XX_UART *pUART, SC16IS7XX_HardControlFlow *pHardFlow, SC16IS7XX_SoftControlFlow *pSoftFlow, const uint8_t* pSpecialChar, bool useAdressChar);
 // DO NOT USE DIRECTLY, use SC16IS7XX_InitUART() instead! UART configuration needs to be configured with a safe UART configuration to avoid spurious effects, which is done in the SC16IS7XX_InitUART() function
 static eERRORRESULT __SC16IS7XX_SetUARTConfiguration(SC16IS7XX_UART *pUART, const SC16IS7XX_UARTconfig *pUARTConf);
 // DO NOT USE DIRECTLY, use SC16IS7XX_InitUART() instead! UART configuration needs to be configured with a safe UART configuration to avoid spurious effects, which is done in the SC16IS7XX_InitUART() function
@@ -112,7 +112,7 @@ eERRORRESULT Init_SC16IS7XX(SC16IS7XX *pComp, const SC16IS7XX_Config *pConf)
   if (pComp->DevicePN >= SC16IS7XX_PN_COUNT) return ERR__UNKNOWN_DEVICE;
   if ((pComp->XtalFreq != 0) && (pComp->XtalFreq > SC16IS7XX_XTAL_FREQ_MAX)) return ERR__FREQUENCY_ERROR; // The device crystal should not be > 24MHz
   if ((pComp->OscFreq  != 0) && (pComp->OscFreq  > SC16IS7XX_OSC_FREQ_MAX )) return ERR__FREQUENCY_ERROR; // The device oscillator should not be > 80MHz
-  if ((pComp->XtalFreq == 0) || (pComp->OscFreq  != 0)) return ERR__CONFIGURATION;                        // Both XtalFreq and OscFreq are configured to 0
+  if ((pComp->XtalFreq == 0) && (pComp->OscFreq  == 0)) return ERR__CONFIGURATION;                        // Both XtalFreq and OscFreq are configured to 0
 
   //--- Configure the Interface -----------------------------
 #ifdef SC16IS7XX_I2C_DEFINED
@@ -145,7 +145,7 @@ eERRORRESULT Init_SC16IS7XX(SC16IS7XX *pComp, const SC16IS7XX_Config *pConf)
   Error = SC16IS7XX_SoftResetDevice(pComp);
   if (Error != ERR_OK) return Error;                                       // If there is an error while calling SC16IS7XX_SoftResetDevice() then return the Error
 
-  //--- Test SPI connection ---------------------------------
+  //--- Test interface connection ---------------------------
   Error = SC16IS7XX_HardwareCommTest(pComp);
   if (Error == ERR__BAD_DATA) return ERR__NO_DEVICE_DETECTED;              // If there is a bad data error then the device is not detected
   if (Error != ERR_OK) return Error;                                       // If there is an error while calling SC16IS7XX_HardwareCommTest() then return the Error
@@ -213,7 +213,7 @@ bool SC16IS7XX_IsReady(SC16IS7XX *pComp)
 #endif
   I2C_Interface* pI2C = GET_I2C_INTERFACE;
 #if defined(CHECK_NULL_PARAM) && defined(USE_DYNAMIC_INTERFACE)
-  if (pI2C->fnSPI_Transfer == NULL) return false;
+  if (pI2C->fnI2C_Transfer == NULL) return false;
 #endif
   I2CInterface_Packet PacketDesc = I2C_INTERFACE_NO_DATA_DESC(pComp->I2Caddress & I2C_WRITE_ANDMASK);
   return (pI2C->fnI2C_Transfer(pI2C, &PacketDesc) == ERR_OK); // Send only the chip address and get the Ack flag
@@ -240,10 +240,10 @@ eERRORRESULT __SC16IS7XX_ReadData(SC16IS7XX *pComp, const eSC16IS7XX_Channel cha
   if (pComp->Interface == SC16IS7XX_INTERFACE_I2C)
   {
     I2C_Interface* pI2C = GET_I2C_INTERFACE;
-#if defined(CHECK_NULL_PARAM) && defined(USE_DYNAMIC_INTERFACE)
+# if defined(CHECK_NULL_PARAM) && defined(USE_DYNAMIC_INTERFACE)
     if (pI2C->fnI2C_Transfer == NULL) return ERR__PARAMETER_ERROR;
-#endif
-    uint8_t ChipAddrW = ((pComp->I2Caddress & SC16IS7XX_CHIPADDRESS_MASK) & I2C_WRITE_ANDMASK);
+# endif
+    uint8_t ChipAddrW = (pComp->I2Caddress & I2C_WRITE_ANDMASK);
     uint8_t ChipAddrR = (ChipAddrW | I2C_READ_ORMASK);
 
     //--- Send the address ---
@@ -260,9 +260,9 @@ eERRORRESULT __SC16IS7XX_ReadData(SC16IS7XX *pComp, const eSC16IS7XX_Channel cha
   if (pComp->Interface == SC16IS7XX_INTERFACE_SPI)
   {
     SPI_Interface* pSPI = GET_SPI_INTERFACE;
-#if defined(CHECK_NULL_PARAM) && defined(USE_DYNAMIC_INTERFACE)
+# if defined(CHECK_NULL_PARAM) && defined(USE_DYNAMIC_INTERFACE)
     if (pSPI->fnSPI_Transfer == NULL) return ERR__PARAMETER_ERROR;
-#endif
+# endif
     Address |= SC16IS7XX_SPI_READ;
 
     //--- Send the address ---
@@ -305,10 +305,10 @@ eERRORRESULT __SC16IS7XX_WriteData(SC16IS7XX *pComp, const eSC16IS7XX_Channel ch
   if (pComp->Interface == SC16IS7XX_INTERFACE_I2C)
   {
     I2C_Interface* pI2C = GET_I2C_INTERFACE;
-#if defined(CHECK_NULL_PARAM) && defined(USE_DYNAMIC_INTERFACE)
+# if defined(CHECK_NULL_PARAM) && defined(USE_DYNAMIC_INTERFACE)
     if (pI2C->fnI2C_Transfer == NULL) return ERR__PARAMETER_ERROR;
-#endif
-    uint8_t ChipAddrW = ((pComp->I2Caddress & SC16IS7XX_CHIPADDRESS_MASK) & I2C_WRITE_ANDMASK);
+# endif
+    uint8_t ChipAddrW = (pComp->I2Caddress & I2C_WRITE_ANDMASK);
 
     //--- Send the address ---
     I2CInterface_Packet AddrPacketDesc = I2C_INTERFACE_TX_DATA_DESC(ChipAddrW, true, &Address, sizeof(uint8_t), false, I2C_WRITE_THEN_WRITE_FIRST_PART);
@@ -325,9 +325,9 @@ eERRORRESULT __SC16IS7XX_WriteData(SC16IS7XX *pComp, const eSC16IS7XX_Channel ch
   if (pComp->Interface == SC16IS7XX_INTERFACE_SPI)
   {
     SPI_Interface* pSPI = GET_SPI_INTERFACE;
-#if defined(CHECK_NULL_PARAM) && defined(USE_DYNAMIC_INTERFACE)
+# if defined(CHECK_NULL_PARAM) && defined(USE_DYNAMIC_INTERFACE)
     if (pSPI->fnSPI_Transfer == NULL) return ERR__PARAMETER_ERROR;
-#endif
+# endif
     //--- Send the address ---
     SPIInterface_Packet AddrPacketDesc = SPI_INTERFACE_TX_DATA_DESC(&Address, sizeof(uint8_t), false); // Prepare SPI packet description to use
     Error = pSPI->fnSPI_Transfer(pSPI, &AddrPacketDesc);                                               // Transfer the address
@@ -572,7 +572,7 @@ eERRORRESULT SC16IS7XX_InitUART(SC16IS7XX_UART *pUART, const SC16IS7XX_UARTconfi
 #ifdef CHECK_NULL_PARAM
   if (pComp == NULL) return ERR__UNKNOWN_DEVICE;
 #endif
-  SC16IS7XX_UARTconfig *pConf = (SC16IS7XX_UARTconfig*) pUARTConf;
+  SC16IS7XX_UARTconfig *pConf = (SC16IS7XX_UARTconfig*)pUARTConf;
   eERRORRESULT Error;
 
   //--- Check the UART channel ------------------------------
@@ -594,58 +594,59 @@ eERRORRESULT SC16IS7XX_InitUART(SC16IS7XX_UART *pUART, const SC16IS7XX_UARTconfi
 #endif
 
   //--- Enable Enhanced Functions ---------------------------
-  Error = SC16IS7XX_EnableEnhancedFunctions(pComp, pUART->Channel);    // Enable the enhanced function of the UART channel
-  if (Error != ERR_OK) return Error;                                   // If there is an error while calling SC16IS7XX_EnableEnhancedFunctions() then return the error
+  Error = SC16IS7XX_EnableEnhancedFunctions(pComp, pUART->Channel); // Enable the enhanced function of the UART channel
+  if (Error != ERR_OK) return Error;                                // If there is an error while calling SC16IS7XX_EnableEnhancedFunctions() then return the error
 
   //--- Enable TCR and TLR ---
   Error = SC16IS7XX_ModifyRegister(pComp, pUART->Channel, RegSC16IS7XX_MCR, SC16IS7XX_MCR_TCR_AND_TLR_REGISTER_ENABLE, SC16IS7XX_MCR_TCR_AND_TLR_REGISTER_Mask);
-  if (Error != ERR_OK) return Error;                                   // If there is an error while calling SC16IS7XX_ModifyRegister() then return the error
+  if (Error != ERR_OK) return Error;                                // If there is an error while calling SC16IS7XX_ModifyRegister() then return the error
 
   //--- Disable Interrupts, Tx, Rx and clear FIFOs ----------
   SC16IS7XX_IER_Register OriginalIER;
   Error = SC16IS7XX_ReadRegister(pComp, pUART->Channel, RegSC16IS7XX_IER, &OriginalIER.IER); // Read and save configuration of the IER register
-  if (Error != ERR_OK) return Error;                                   // If there is an error while calling SC16IS7XX_ReadRegister() then return the error
+  if (Error != ERR_OK) return Error;                                // If there is an error while calling SC16IS7XX_ReadRegister() then return the error
   Error = SC16IS7XX_WriteRegister(pComp, pUART->Channel, RegSC16IS7XX_IER, 0x00); // Disable all interrupts. And with this, the device sleep will be disabled
-  if (Error != ERR_OK) return Error;                                   // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
-  Error = SC16IS7XX_TxRxDisable(pUART, true, true);                    // Disable Transmitter and receiver
-  if (Error != ERR_OK) return Error;                                   // If there is an error while calling SC16IS7XX_TxRxDisable() then return the error
-  Error = SC16IS7XX_ResetFIFO(pUART, true, true);                      // Reset and clear Transmit and receive FIFOs
-  if (Error != ERR_OK) return Error;                                   // If there is an error while calling SC16IS7XX_ResetFIFO() then return the error
+  if (Error != ERR_OK) return Error;                                // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
+  Error = SC16IS7XX_TxRxDisable(pUART, true, true);                 // Disable Transmitter and receiver
+  if (Error != ERR_OK) return Error;                                // If there is an error while calling SC16IS7XX_TxRxDisable() then return the error
+  Error = SC16IS7XX_ResetFIFO(pUART, true, true);                   // Reset and clear Transmit and receive FIFOs
+  if (Error != ERR_OK) return Error;                                // If there is an error while calling SC16IS7XX_ResetFIFO() then return the error
 
   //--- Disable control flow --------------------------------
-  Error = __SC16IS7XX_SetControlFlowConfiguration(pUART, NULL, NULL, false); // Disable the control flow
-  if (Error != ERR_OK) return Error;                                   // If there is an error while calling __SC16IS7XX_SetControlFlowConfiguration() then return the error
+  Error = __SC16IS7XX_SetControlFlowConfiguration(pUART, NULL, NULL, NULL, false); // Disable the control flow
+  if (Error != ERR_OK) return Error;                                // If there is an error while calling __SC16IS7XX_SetControlFlowConfiguration() then return the error
 
   //--- Set UART configuration ------------------------------
-  Error = __SC16IS7XX_SetUARTConfiguration(pUART, pUARTConf);          // Configure UART
-  if (Error != ERR_OK) return Error;                                   // If there is an error while calling SC16IS7XX_SetUARTConfiguration() then return the error
+  Error = __SC16IS7XX_SetUARTConfiguration(pUART, pUARTConf);       // Configure UART
+  if (Error != ERR_OK) return Error;                                // If there is an error while calling SC16IS7XX_SetUARTConfiguration() then return the error
 
   //--- Set Baudrate ----------------------------------------
-  Error = SC16IS7XX_SetUARTBaudRate(pUART, pUARTConf);                 // Configure UART baudrate
-  if (Error != ERR_OK) return Error;                                   // If there is an error while calling SC16IS7XX_SetUARTBaudRate() then return the error
+  Error = SC16IS7XX_SetUARTBaudRate(pUART, pUARTConf);              // Configure UART baudrate
+  if (Error != ERR_OK) return Error;                                // If there is an error while calling SC16IS7XX_SetUARTBaudRate() then return the error
 
   //--- Set FIFO configuration ------------------------------
   Error = __SC16IS7XX_ConfigureFIFOs(pUART, pUARTConf->UseFIFOs, pUARTConf->TxTrigLvl, pUARTConf->RxTrigLvl); // Configure FIFOs
-  if (Error != ERR_OK) return Error;                                   // If there is an error while calling __SC16IS7XX_ConfigureFIFOs() then return the error
+  if (Error != ERR_OK) return Error;                                // If there is an error while calling __SC16IS7XX_ConfigureFIFOs() then return the error
 
   //--- Return to original interrupt configuration ----------
   Error = SC16IS7XX_WriteRegister(pComp, pUART->Channel, RegSC16IS7XX_IER, OriginalIER.IER); // Re-enable previous interrupts with the sleep state if previously set
-  if (Error != ERR_OK) return Error;                                   // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
+  if (Error != ERR_OK) return Error;                                // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
 
   //--- Transmitter and receiver configuration --------------
   Error = SC16IS7XX_TxRxDisable(pUART, pUARTConf->DisableTransmitter, pUARTConf->DisableReceiver); // Disable Transmitter and receiver
-  if (Error != ERR_OK) return Error;                                   // If there is an error while calling SC16IS7XX_TxRxDisable() then return the error
+  if (Error != ERR_OK) return Error;                                // If there is an error while calling SC16IS7XX_TxRxDisable() then return the error
 
   //--- Test UART connection --------------------------------
-  if ((pUART->DriverConfig & SC16IS7XX_TEST_LOOPBACK_AT_INIT) > 0)     // If a UART loopback test is asked...
+  if (((pUART->DriverConfig & SC16IS7XX_TEST_LOOPBACK_AT_INIT) > 0) && (pUARTConf->DisableTransmitter == false) && (pUARTConf->DisableReceiver == false)) // If a UART loopback test is asked...
   {
-    Error = SC16IS7XX_UARTCommTest(pUART);                             // Test the UART before Control Flow because the Control Flow may interfere with the test
-    if (Error != ERR_OK) return Error;                                 // If there is an error while calling SC16IS7XX_UARTCommTest() then return the error
+    Error = SC16IS7XX_UARTCommTest(pUART);                          // Test the UART before Control Flow because the Control Flow may interfere with the test
+    if (Error != ERR_OK) return Error;                              // If there is an error while calling SC16IS7XX_UARTCommTest() then return the error
   }
 
   //--- Set Control Flow ------------------------------------
   SC16IS7XX_HardControlFlow* pHardFlow = NULL;
   SC16IS7XX_SoftControlFlow* pSoftFlow = NULL;
+  const uint8_t* pSpecialChar = (pUARTConf->UseSpecialChar ? &pUARTConf->SpecialChar : NULL);
   bool UseAddressChar = false;
   switch (pUARTConf->UARTtype)
   {
@@ -670,12 +671,13 @@ eERRORRESULT SC16IS7XX_InitUART(SC16IS7XX_UART *pUART, const SC16IS7XX_UARTconfi
       break;
     default: break;
   }
-  Error = __SC16IS7XX_SetControlFlowConfiguration(pUART, pHardFlow, pSoftFlow, UseAddressChar); // Configure the control flow
-  if (Error != ERR_OK) return Error;                                   // If there is an error while calling __SC16IS7XX_SetControlFlowConfiguration() then return the error
+  if ((pHardFlow != NULL) || (pSoftFlow != NULL) || (pSpecialChar != NULL))
+    Error = __SC16IS7XX_SetControlFlowConfiguration(pUART, pHardFlow, pSoftFlow, pSpecialChar, UseAddressChar); // Configure the control flow
+  if (Error != ERR_OK) return Error;                                // If there is an error while calling __SC16IS7XX_SetControlFlowConfiguration() then return the error
 
-  //--- Configure TCR and TLR -------------------------------
+  //--- Disable TCR and TLR access --------------------------
   Error = SC16IS7XX_ModifyRegister(pComp, pUART->Channel, RegSC16IS7XX_MCR, SC16IS7XX_MCR_TCR_AND_TLR_REGISTER_DISABLE, SC16IS7XX_MCR_TCR_AND_TLR_REGISTER_Mask);
-  if (Error != ERR_OK) return Error;                                   // If there is an error while calling SC16IS7XX_ModifyRegister() then return the error
+  if (Error != ERR_OK) return Error;                                // If there is an error while calling SC16IS7XX_ModifyRegister() then return the error
 
   //--- Configure interrupts --------------------------------
   return SC16IS7XX_ConfigureInterrupt(pUART, pConf->Interrupts);
@@ -712,19 +714,19 @@ eERRORRESULT SC16IS7XX_UARTCommTest(SC16IS7XX_UART *pUART)
   if (Error != ERR_OK) return Error;                                                    // If there is an error while calling SC16IS7XX_ResetFIFO() then return the error
 
   //--- Test UART communication ---
-  Error = SC16IS7XX_TransmitChar(pUART, (char)0x55);                                    // Transmit char 0x55 by UART
+  Error = SC16IS7XX_TransmitChar(pUART, (char)(0x55 & 0x1F));                           // Transmit char 0x55 (reduced to 5 bits for 5-bits compatibility) by UART
   if (Error != ERR_OK) return Error;                                                    // If there is an error while calling SC16IS7XX_TransmitCharByUART() then return the error
   Error = SC16IS7XX_ReceiveChar(pUART, &Value, &CharError);                             // Receive a char UART by UART
   if (Error != ERR_OK) return Error;                                                    // If there is an error while calling SC16IS7XX_ReceiveCharByUART() then return the error
   if (CharError != SC16IS7XX_NO_RX_ERROR) return ERR__PERIPHERAL_NOT_VALID;             // If the received data create an error then the peripheral is not valid
-  if (Value != (char)0x55) return ERR__PERIPHERAL_NOT_VALID;                            // If the read back value is not the same as the one written, return an error
+  if (Value != (char)(0x55 & 0x1F)) return ERR__PERIPHERAL_NOT_VALID;                   // If the read back value is not the same as the one written, return an error
 
-  Error = SC16IS7XX_TransmitChar(pUART, (char)0xAA);                                    // Transmit char 0xAA by UART
+  Error = SC16IS7XX_TransmitChar(pUART, (char)(0xAA & 0x1F));                           // Transmit char 0xAA (reduced to 5 bits for 5-bits compatibility) by UART
   if (Error != ERR_OK) return Error;                                                    // If there is an error while calling SC16IS7XX_TransmitCharByUART() then return the error
   Error = SC16IS7XX_ReceiveChar(pUART, &Value, &CharError);                             // Receive a char UART by UART
   if (Error != ERR_OK) return Error;                                                    // If there is an error while calling SC16IS7XX_ReceiveCharByUART() then return the error
   if (CharError != SC16IS7XX_NO_RX_ERROR) return ERR__PERIPHERAL_NOT_VALID;             // If the received data create an error then the peripheral is not valid
-  if (Value != (char)0xAA) return ERR__PERIPHERAL_NOT_VALID;                            // If the read back value is not the same as the one written, return an error
+  if (Value != (char)(0xAA & 0x1F)) return ERR__PERIPHERAL_NOT_VALID;                   // If the read back value is not the same as the one written, return an error
 
   RegMCR.MCR &= SC16IS7XX_MCR_NORMAL_OPERATING_MODE;                                    // Set normal operating mode
   return SC16IS7XX_WriteRegister(pComp, pUART->Channel, RegSC16IS7XX_MCR, RegMCR.MCR);  // Write the MCR register
@@ -843,7 +845,7 @@ eERRORRESULT __SC16IS7XX_SetUARTConfiguration(SC16IS7XX_UART *pUART, const SC16I
   if (Error != ERR_OK) return Error;                                                                           // If there is an error while calling SC16IS7XX_ModifyRegister() then return the error
   SC16IS7XX_ModifyRegister(pComp, pUART->Channel, RegSC16IS7XX_EFCR, RegEFCR.EFCR, SC16IS7XX_EFCR_LINE_CONTROL_MODE_Mask); // Modify the EFCR register
   if (Error != ERR_OK) return Error;                                                                           // If there is an error while calling SC16IS7XX_ModifyRegister() then return the error
-  SC16IS7XX_ModifyRegister(pComp, pUART->Channel, RegSC16IS7XX_MCR, RegIOC.IOControl, RegIOCmask);             // Modify the IOControl register
+  SC16IS7XX_ModifyRegister(pComp, pUART->Channel, RegSC16IS7XX_IOControl, RegIOC.IOControl, RegIOCmask);       // Modify the IOControl register
   if (Error != ERR_OK) return Error;                                                                           // If there is an error while calling SC16IS7XX_ModifyRegister() then return the error
 
   //--- Configuration of the data communication format ---
@@ -951,7 +953,7 @@ eERRORRESULT SC16IS7XX_SetUARTBaudRate(SC16IS7XX_UART *pUART, const SC16IS7XX_UA
 // [STATIC] Configure an UART Control Flow of the SC16IS7XX UART
 //=============================================================================
 // DO NOT USE DIRECTLY, use SC16IS7XX_InitUART() instead! Control Flow needs to be configured with a safe UART configuration to avoid spurious effects, which is done in the SC16IS7XX_InitUART() function
-eERRORRESULT __SC16IS7XX_SetControlFlowConfiguration(SC16IS7XX_UART *pUART, SC16IS7XX_HardControlFlow *pHardFlow, SC16IS7XX_SoftControlFlow *pSoftFlow, bool useAdressChar)
+eERRORRESULT __SC16IS7XX_SetControlFlowConfiguration(SC16IS7XX_UART *pUART, SC16IS7XX_HardControlFlow *pHardFlow, SC16IS7XX_SoftControlFlow *pSoftFlow, const uint8_t* pSpecialChar, bool useAddressChar)
 {
 #ifdef CHECK_NULL_PARAM
   if (pUART == NULL) return ERR__PARAMETER_ERROR;
@@ -963,9 +965,9 @@ eERRORRESULT __SC16IS7XX_SetControlFlowConfiguration(SC16IS7XX_UART *pUART, SC16
   if ((pHardFlow != NULL) && (pSoftFlow != NULL)) return ERR__CONFIGURATION; // The user should not configure Hardware+Software control flow at the same time
   eERRORRESULT Error, ErrorReturn = ERR_OK;
   SC16IS7XX_EFR_Register RegEFR;
-  RegEFR.EFR = SC16IS7XX_EFR_SOFT_FLOW_CONTROL_SET(SC16IS7XX_NoTxCtrlFlow_NoRxCtrlFlow) // Disable All Control Flows but keep Enhanced Functions Enabled
+  RegEFR.EFR = SC16IS7XX_EFR_SOFT_FLOW_CONTROL_SET(SC16IS7XX_NoTxCtrlFlow_NoRxCtrlFlow)   // Disable All Control Flows but keep Enhanced Functions Enabled
              | SC16IS7XX_EFR_ENHANCED_FUNCTION_ENABLE | SC16IS7XX_EFR_RTS_FLOW_CONTROL_DISABLE | SC16IS7XX_EFR_CTS_FLOW_CONTROL_DISABLE
-             | (useAdressChar ? SC16IS7XX_EFR_SPECIAL_CHAR_DETECT_ENABLE : SC16IS7XX_EFR_SPECIAL_CHAR_DETECT_DISABLE);
+             | (useAddressChar ? SC16IS7XX_EFR_SPECIAL_CHAR_DETECT_ENABLE : SC16IS7XX_EFR_SPECIAL_CHAR_DETECT_DISABLE);
 
   //--- Set Trigger Control Level ---
   if ((pHardFlow != NULL) || (pSoftFlow != NULL))
@@ -984,42 +986,41 @@ eERRORRESULT __SC16IS7XX_SetControlFlowConfiguration(SC16IS7XX_UART *pUART, SC16
   //--- Enable access to enhanced registers ---
   SC16IS7XX_LCR_Register OriginalLCR;
   Error = SC16IS7XX_SetRegisterAccess(pComp, pUART->Channel, SC16IS7XX_LCR_VALUE_SET_ENHANCED_FEATURE_REGISTER, &OriginalLCR.LCR);
-  if (Error != ERR_OK) return Error;                                                      // If there is an error while calling SC16IS7XX_SetRegisterAccess() then return the error
+  if (Error != ERR_OK) ErrorReturn = Error;                                               // If there is an error while calling SC16IS7XX_SetRegisterAccess() then return the error
 
   //--- Configure Control Flow ---
   if (ErrorReturn == ERR_OK)
   {
-    if ((pHardFlow != NULL) && (pSoftFlow == NULL))                                                            //*** Hardware Control Flow
+    if ((pHardFlow != NULL) && (pSoftFlow == NULL))                                                  //*** Hardware Control Flow
     {
-      RegEFR.EFR = SC16IS7XX_EFR_SOFT_FLOW_CONTROL_SET(SC16IS7XX_NoTxCtrlFlow_NoRxCtrlFlow)                    // Disable Software Control Flow and keep Enhanced Functions Enabled
+      RegEFR.EFR = SC16IS7XX_EFR_SOFT_FLOW_CONTROL_SET(SC16IS7XX_NoTxCtrlFlow_NoRxCtrlFlow)          // Disable Software Control Flow and keep Enhanced Functions Enabled
                   | SC16IS7XX_EFR_ENHANCED_FUNCTION_ENABLE | SC16IS7XX_EFR_SPECIAL_CHAR_DETECT_DISABLE;
       if (pHardFlow->RTSpinControl == SC16IS7XX_AUTOMATIC_PIN_CONTROL) RegEFR.EFR |= SC16IS7XX_EFR_RTS_FLOW_CONTROL_ENABLE;
       if (pHardFlow->CTSpinControl == SC16IS7XX_AUTOMATIC_PIN_CONTROL) RegEFR.EFR |= SC16IS7XX_EFR_CTS_FLOW_CONTROL_ENABLE;
-      if (pHardFlow->UseSpecialCharOnXoff2 || useAdressChar)                                                   // Address char use the special character detect
-      {
-        RegEFR.EFR |= SC16IS7XX_EFR_SPECIAL_CHAR_DETECT_ENABLE;
-        if (useAdressChar == false)                                                                            // Set only if it is a special char and not an address char. The address char is set in the function __SC16IS7XX_SetUARTConfiguration()
-        {
-          Error = SC16IS7XX_WriteRegister(pComp, pUART->Channel, RegSC16IS7XX_XOFF2, pHardFlow->SpecialChar);  // Write the Xoff2 register
-          if (Error != ERR_OK) ErrorReturn = Error;                                                            // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
-        }
-      }
+      if ((pSpecialChar != NULL) && useAddressChar) ErrorReturn = ERR__CONFIGURATION;                // Impossible to have a special character detect AND address char used at the same time
+      if (useAddressChar) RegEFR.EFR |= SC16IS7XX_EFR_SPECIAL_CHAR_DETECT_ENABLE;                    // Address char use the special character detect
     }
 
-    if ((pHardFlow == NULL) && (pSoftFlow != NULL))                                                            //*** Software Control Flow
+    if ((pHardFlow == NULL) && (pSoftFlow != NULL))                                                  //*** Software Control Flow
     {
-      RegEFR.EFR = SC16IS7XX_EFR_SOFT_FLOW_CONTROL_SET(pSoftFlow->Config)                                      // Set Software Control Flow, keep Enhanced Functions Enabled, and disable Hardware Control Flow
+      if ((pSpecialChar != NULL) && SC16IS7XX_IS_SOFT_CONTROL_FLOW_USES_XOFF2(pSoftFlow->Config)) ErrorReturn = ERR__CONFIGURATION; // Impossible to have a special char AND Xoff2 used in the control flow
+      RegEFR.EFR = SC16IS7XX_EFR_SOFT_FLOW_CONTROL_SET(pSoftFlow->Config)                            // Set Software Control Flow, keep Enhanced Functions Enabled, and disable Hardware Control Flow
                   | SC16IS7XX_EFR_ENHANCED_FUNCTION_ENABLE | SC16IS7XX_EFR_SPECIAL_CHAR_DETECT_DISABLE
                   | SC16IS7XX_EFR_RTS_FLOW_CONTROL_DISABLE | SC16IS7XX_EFR_CTS_FLOW_CONTROL_DISABLE;
-      Error = SC16IS7XX_WriteRegister(pComp, pUART->Channel, RegSC16IS7XX_XON1, pSoftFlow->Xon1);              // Write the Xon1 register
-      if (Error != ERR_OK) ErrorReturn = Error;                                                                // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
-      Error = SC16IS7XX_WriteRegister(pComp, pUART->Channel, RegSC16IS7XX_XON2, pSoftFlow->Xon2);              // Write the Xon2 register
-      if (Error != ERR_OK) ErrorReturn = Error;                                                                // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
-      Error = SC16IS7XX_WriteRegister(pComp, pUART->Channel, RegSC16IS7XX_XOFF1, pSoftFlow->Xoff1);            // Write the Xoff1 register
-      if (Error != ERR_OK) ErrorReturn = Error;                                                                // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
-      Error = SC16IS7XX_WriteRegister(pComp, pUART->Channel, RegSC16IS7XX_XOFF2, pSoftFlow->Xoff2SpecialChar); // Write the Xoff2 register
-      if (Error != ERR_OK) ErrorReturn = Error;                                                                // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
-      if (pSoftFlow->UseSpecialCharOnXoff2) RegEFR.EFR |= SC16IS7XX_EFR_SPECIAL_CHAR_DETECT_ENABLE;
+      Error = SC16IS7XX_WriteRegister(pComp, pUART->Channel, RegSC16IS7XX_XON1, pSoftFlow->Xon1);    // Write the Xon1 register
+      if (Error != ERR_OK) ErrorReturn = Error;                                                      // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
+      Error = SC16IS7XX_WriteRegister(pComp, pUART->Channel, RegSC16IS7XX_XON2, pSoftFlow->Xon2);    // Write the Xon2 register
+      if (Error != ERR_OK) ErrorReturn = Error;                                                      // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
+      Error = SC16IS7XX_WriteRegister(pComp, pUART->Channel, RegSC16IS7XX_XOFF1, pSoftFlow->Xoff1);  // Write the Xoff1 register
+      if (Error != ERR_OK) ErrorReturn = Error;                                                      // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
+      if (pSpecialChar == NULL) Error = SC16IS7XX_WriteRegister(pComp, pUART->Channel, RegSC16IS7XX_XOFF2, pSoftFlow->Xoff2); // Write the Xoff2 register
+      if (Error != ERR_OK) ErrorReturn = Error;                                                      // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
+    }
+    if (pSpecialChar != NULL)
+    {
+      RegEFR.EFR |= SC16IS7XX_EFR_SPECIAL_CHAR_DETECT_ENABLE;
+      Error = SC16IS7XX_WriteRegister(pComp, pUART->Channel, RegSC16IS7XX_XOFF2, *pSpecialChar);     // Write the special char in the Xoff2 register
+      if (Error != ERR_OK) ErrorReturn = Error;                                                      // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
     }
     Error = SC16IS7XX_WriteRegister(pComp, pUART->Channel, RegSC16IS7XX_EFR, RegEFR.EFR);  // Write the EFR register
     if (Error != ERR_OK) ErrorReturn = Error;                                              // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
@@ -1147,7 +1148,7 @@ eERRORRESULT SC16IS7XX_ConfigureInterrupt(SC16IS7XX_UART *pUART, setSC16IS7XX_In
 //=============================================================================
 // Get interrupt event of the SC16IS7XX UART
 //=============================================================================
-eERRORRESULT SC16IS7XX_GetInterruptEvents(SC16IS7XX_UART *pUART, bool *intPending, eSC16IS7XX_InterruptSource *interruptFlag)
+eERRORRESULT SC16IS7XX_GetInterruptEvents(SC16IS7XX_UART *pUART, eSC16IS7XX_InterruptSource *interruptFlag)
 {
 #ifdef CHECK_NULL_PARAM
   if (pUART == NULL) return ERR__PARAMETER_ERROR;
@@ -1161,9 +1162,27 @@ eERRORRESULT SC16IS7XX_GetInterruptEvents(SC16IS7XX_UART *pUART, bool *intPendin
 
   Error = SC16IS7XX_ReadRegister(pComp, pUART->Channel, RegSC16IS7XX_IIR, &RegIIR.IIR);       // Read the IIR register
   if (Error != ERR_OK) return Error;                                                          // If there is an error while calling SC16IS7XX_ReadRegister() then return the error
-  *intPending    = (RegIIR.IIR & SC16IS7XX_IIR_INTERRUPT_PENDING_Mask) == 0;                  // Interrupt pending status
   *interruptFlag = (eSC16IS7XX_InterruptSource)SC16IS7XX_IIR_INTERRUT_SOURCE_GET(RegIIR.IIR); // Extract interrupt
   return ERR_OK;
+}
+
+
+
+//=============================================================================
+// Get status of the SC16IS7XX UART
+//=============================================================================
+eERRORRESULT SC16IS7XX_GetUARTstatus(SC16IS7XX_UART *pUART, setSC16IS7XX_Status *statusFlag)
+{
+#ifdef CHECK_NULL_PARAM
+  if (pUART == NULL) return ERR__PARAMETER_ERROR;
+#endif
+  SC16IS7XX* pComp = pUART->Device; // Get the SC16IS7XX device of this UART
+  eERRORRESULT Error;
+
+  SC16IS7XX_LSR_Register RegLSR;
+  Error = SC16IS7XX_ReadRegister(pComp, pUART->Channel, RegSC16IS7XX_LSR, &RegLSR.LSR); // Read the LSR register
+  *statusFlag = (setSC16IS7XX_Status)(RegLSR.LSR & SC16IS7XX_STATUS_Mask);
+  return Error;
 }
 
 
@@ -1214,7 +1233,7 @@ eERRORRESULT SC16IS7XX_GetDataCountRxFIFO(SC16IS7XX_UART *pUART, uint8_t *dataCo
 eERRORRESULT SC16IS7XX_TransmitData(SC16IS7XX_UART *pUART, uint8_t *data, size_t size, size_t *actuallySent)
 {
 #ifdef CHECK_NULL_PARAM
-  if ((pUART == NULL) || (actuallySent == NULL)) return ERR__PARAMETER_ERROR;
+  if ((pUART == NULL) || (data == NULL) || (actuallySent == NULL)) return ERR__PARAMETER_ERROR;
 #endif
   SC16IS7XX* pComp = pUART->Device; // Get the SC16IS7XX device of this UART
 #ifdef CHECK_NULL_PARAM
@@ -1312,7 +1331,7 @@ eERRORRESULT SC16IS7XX_TransmitData_Gen(UART_Interface *pIntDev, uint8_t *data, 
 
 
 //=============================================================================
-// Transmit data to UART FIFO of the SC16IS7XX UART
+// Transmit a char to UART FIFO of the SC16IS7XX UART
 //=============================================================================
 eERRORRESULT SC16IS7XX_TransmitChar(SC16IS7XX_UART *pUART, const char data)
 {
@@ -1324,6 +1343,55 @@ eERRORRESULT SC16IS7XX_TransmitChar(SC16IS7XX_UART *pUART, const char data)
     Error = SC16IS7XX_TransmitData(pUART, &DataToSend, 1, &ActuallySent);
     if (Error != ERR_OK) return Error; // If there is an error while calling SC16IS7XX_TransmitData() then return the error
   } while (ActuallySent == 0);
+  return ERR_OK;
+}
+
+
+
+#ifdef SC16IS7XX_USE_BUFFERS
+//=============================================================================
+// Flush data from UART Tx Buffer to the FIFO of the SC16IS7XX UART
+//=============================================================================
+eERRORRESULT SC16IS7XX_FlushTxBufferToFIFO(SC16IS7XX_UART *pUART)
+{
+  size_t ActuallySent;   // Dummy
+  uint8_t DummyByte = 0; // Dummy
+  return SC16IS7XX_TransmitData(pUART, &DummyByte, 0, &ActuallySent); // This will put 0 bytes into Tx FIFO and will trigger a send to UART Tx FIFO
+}
+#endif
+
+
+
+//=============================================================================
+// Flush all data in TxBuffer, UART FIFO and TSR empty of the SC16IS7XX UART
+//=============================================================================
+eERRORRESULT SC16IS7XX_WaitEndTx(SC16IS7XX_UART *pUART)
+{
+#ifdef CHECK_NULL_PARAM
+  if (pUART == NULL) return ERR__PARAMETER_ERROR;
+#endif
+  SC16IS7XX* pComp = pUART->Device; // Get the SC16IS7XX device of this UART
+  eERRORRESULT Error;
+
+#ifdef SC16IS7XX_USE_BUFFERS
+  SC16IS7XX_Buffer* const pBuf = &pUART->TxBuffer;
+  //--- Flush Tx buffer ---
+  if (pBuf->pData != NULL)
+    while (pBuf->IsFull || (pBuf->PosIn != pBuf->PosOut))
+    {
+      Error = SC16IS7XX_FlushTxBufferToFIFO(pUART);
+      if ((Error != ERR_OK) && (Error != ERR__BUSY) && (Error != ERR__SPI_BUSY) && (Error != ERR__I2C_BUSY)) return Error; // If there is an error while calling SC16IS7XX_FlushTxBufferToFIFO() then return the error
+    }
+#endif
+
+  //--- Wait end FIFO empty and TSR empty ---
+  SC16IS7XX_LSR_Register RegLSR;
+  while (true)
+  {
+    Error = SC16IS7XX_ReadRegister(pComp, pUART->Channel, RegSC16IS7XX_LSR, &RegLSR.LSR); // Read the LSR register
+    if (Error != ERR_OK) return Error;                                                    // If there is an error while calling SC16IS7XX_ReadRegister() then return the error
+    if (SC16IS7XX_IS_THR_AND_TSR_EMPTY(RegLSR.LSR)) break;
+  }
   return ERR_OK;
 }
 
@@ -1349,8 +1417,8 @@ void __SC16IS7XX_RxBufferToDataBuff(SC16IS7XX_Buffer* const pBuf, uint8_t *data,
     {
       memcpy(data, &pBuf->pData[pBuf->PosOut], *actuallyReceived);             // Copy data from Rx buffer
       *size -= *actuallyReceived;                                              // Subtract the size of data with actually received
-      pBuf->PosOut += *actuallyReceived;                                       // Increment In position
-      if (pBuf->PosOut >= pBuf->BufferSize) pBuf->PosOut -= pBuf->BufferSize;  // Correct In position
+      pBuf->PosOut += *actuallyReceived;                                       // Increment Out position
+      if (pBuf->PosOut >= pBuf->BufferSize) pBuf->PosOut -= pBuf->BufferSize;  // Correct Out position
       pBuf->IsFull = false;                                                    // If data are removed from buffer, then the buffer is no longer full
     }
   }
@@ -1424,8 +1492,8 @@ eERRORRESULT SC16IS7XX_ReceiveData(SC16IS7XX_UART *pUART, uint8_t *data, size_t 
          DataSizeToGet = (AvailableBufSize > (size_t)AvailableData ? (size_t)AvailableData : AvailableBufSize); // Set how many data will actually be received
          if (DataSizeToGet > 0)
          {
-           pBuf->PosIn += DataSizeToGet;                                                         // Increment Out position
-           if (pBuf->PosIn >= pBuf->BufferSize) pBuf->PosIn -= pBuf->BufferSize;                 // Correct Out position
+           pBuf->PosIn += DataSizeToGet;                                                         // Increment In position
+           if (pBuf->PosIn >= pBuf->BufferSize) pBuf->PosIn -= pBuf->BufferSize;                 // Correct In position
            pBuf->IsFull = (pBuf->PosOut == pBuf->PosIn);                                         // Buffer is full only if the buffer positions are the same after retrieving data
          }
       }
@@ -1465,7 +1533,7 @@ eERRORRESULT SC16IS7XX_ReceiveData_Gen(UART_Interface *pIntDev, uint8_t *data, s
 
 
 //=============================================================================
-// Receive data from UART FIFO of the SC16IS7XX
+// Receive a char from UART FIFO of the SC16IS7XX
 //=============================================================================
 eERRORRESULT SC16IS7XX_ReceiveChar(SC16IS7XX_UART *pUART, char *data, setSC16IS7XX_ReceiveError *charError)
 {
@@ -1478,6 +1546,21 @@ eERRORRESULT SC16IS7XX_ReceiveChar(SC16IS7XX_UART *pUART, char *data, setSC16IS7
   } while (ActuallyReceived == 0);
   return ERR_OK;
 }
+
+
+
+#ifdef SC16IS7XX_USE_BUFFERS
+//=============================================================================
+// Retrieve data from Rx UART FIFO of the SC16IS7XX UART to the Rx Buffer
+//=============================================================================
+eERRORRESULT SC16IS7XX_RetrieveRxFIFOtoBuffer(SC16IS7XX_UART *pUART)
+{
+  size_t ActuallyReceived;                 // Dummy
+  uint8_t DummyByte = 0;                   // Dummy
+  setSC16IS7XX_ReceiveError LastDataError; // Dummy
+  return SC16IS7XX_ReceiveData(pUART, &DummyByte, 0, &ActuallyReceived, &LastDataError); // This will get 0 bytes into Rx data and will trigger a get from UART Rx FIFO
+}
+#endif
 
 
 

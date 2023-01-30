@@ -76,7 +76,7 @@ I2C_Interface I2C0_Interface =
 
 //**********************************************************************************************************************************************************
 //=============================================================================
-// Configuration structure of the SC16IS740 on EXT1 with hard SPI0 on the V71
+// Device configuration structure of the SC16IS740 on EXT1 with hard SPI0 on the V71
 //=============================================================================
 struct SC16IS7XX SC16IS7XX_EXT1 =
 {
@@ -121,6 +121,25 @@ struct SC16IS7XX_UART UART_Chan0_EXT1 = // SC16IS7XX UART
   //--- Device configuration ---
   .UserDriverData = NULL,
   .Device         = SC16IS740_EXT1,
+
+#ifdef SC16IS7XX_USE_BUFFERS
+  .TxBuffer       =
+  {
+    .pData        = NULL,  // No Tx buffer
+    .BufferSize   = 0,
+    .PosIn        = 0,     // No need to fill (set a default value)
+    .PosOut       = 0,     // No need to fill (set a default value)
+    .IsFull       = false, // No need to fill (set a default value)
+  },
+  .RxBuffer       =
+  {
+    .pData        = NULL,  // No Rx buffer
+    .BufferSize   = 0,
+    .PosIn        = 0,     // No need to fill (set a default value)
+    .PosOut       = 0,     // No need to fill (set a default value)
+    .IsFull       = false, // No need to fill (set a default value)
+  },
+#endif
 };
 
 /*struct UART_Interface UART_Int0_EXT1 = // UART Interface generic
@@ -133,10 +152,10 @@ struct SC16IS7XX_UART UART_Chan0_EXT1 = // SC16IS7XX UART
   .Channel         = 0,
 };*/
 
-int32_t Baudrate_UART0_Ext1;
+int32_t Baudrate_UART0_EXT1;
 
 
-// UART0_EXT1 configured into RS-232 (57600-8-N-1), no control flow
+// UART0_EXT1 configured into RS-232 (115200-8-N-1), no control flow
 SC16IS7XX_UARTconfig UART0_EXT1_RS232config =
 {
   //--- UART configuration ---
@@ -145,11 +164,12 @@ SC16IS7XX_UARTconfig UART0_EXT1_RS232config =
   .UARTparity         = SC16IS7XX_NO_PARITY,         // No UART parity
   .UARTstopBit        = SC16IS7XX_STOP_BIT_1bit,     // UART 1-bit stop length
   .UARTbaudrate       = 115200,                      // UART desired baudrate 115200 bauds
-  .UARTbaudrateError  = &Baudrate_UART0_Ext1,
+  .UARTbaudrateError  = &Baudrate_UART0_EXT1,
   .RS232 =
   {
     .ControlFlowType  = SC16IS7XX_NO_CONTROL_FLOW,   // No control flow
   },
+  .UseSpecialChar     = false,                       // No special char on Xoff2
   .DisableTransmitter = false,                       // Enable transmitter
   .DisableReceiver    = false,                       // Enable receiver
 
@@ -170,7 +190,7 @@ SC16IS7XX_UARTconfig UART0_EXT1_RS232config =
 
 //**********************************************************************************************************************************************************
 //=============================================================================
-// Configuration structure of the SC16IS750 with hard I2C on the V71
+// Device configuration structure of the SC16IS750 with hard I2C on the V71
 //=============================================================================
 struct SC16IS7XX SC16IS7XX_I2C =
 {
@@ -187,16 +207,16 @@ struct SC16IS7XX SC16IS7XX_I2C =
   .InterfaceClockSpeed = 400000, // I2C speed at 400kHz
 
   //--- GPIO configuration ---
-  .GPIOsOutState       = 0, // No GPIO on this device
+  .GPIOsOutState       = 0, // Set all GPIO to 0
 };
 
 
 SC16IS7XX_Config SC16IS7XX_I2C_Config =
 {
   //--- GPIOs configuration ---
-  .StartupPinsDirection = 0, // No GPIO on this device
-  .StartupPinsLevel     = 0, // No GPIO on this device
-  .PinsInterruptEnable  = 0, // No GPIO on this device
+  .StartupPinsDirection = 0, // Startup GPIOs direction (0 = output ; 1 = input)
+  .StartupPinsLevel     = 0, // Startup GPIOs output level (0 = set to '0' ; 1 = set to '1')
+  .PinsInterruptEnable  = 0, // GPIOs individual Interrupt (0 = disable ; 1 = enable)
 };
 
 //-----------------------------------------------------------------------------
@@ -211,10 +231,30 @@ struct SC16IS7XX_UART UART_Chan0_I2C = // SC16IS7XX UART
 {
   //--- UART configuration ---
   .Channel        = SC16IS7XX_CHANNEL_A,
-  .DriverConfig   = SC16IS7XX_DRIVER_BURST_TX | SC16IS7XX_DRIVER_BURST_RX,
+  .DriverConfig   = SC16IS7XX_DRIVER_BURST_TX | SC16IS7XX_DRIVER_BURST_RX/* | SC16IS7XX_TEST_LOOPBACK_AT_INIT*/,
+//  .DriverConfig   = SC16IS7XX_DRIVER_SAFE_TX | SC16IS7XX_DRIVER_SAFE_RX,
   //--- Device configuration ---
   .UserDriverData = NULL,
   .Device         = SC16IS750_I2C,
+
+#ifdef SC16IS7XX_USE_BUFFERS
+  .TxBuffer       =
+  {
+    .pData        = NULL,  // No Tx buffer
+    .BufferSize   = 0,
+    .PosIn        = 0,     // No need to fill (set a default value)
+    .PosOut       = 0,     // No need to fill (set a default value)
+    .IsFull       = false, // No need to fill (set a default value)
+  },
+  .RxBuffer       =
+  {
+    .pData        = NULL,  // No Rx buffer
+    .BufferSize   = 0,
+    .PosIn        = 0,     // No need to fill (set a default value)
+    .PosOut       = 0,     // No need to fill (set a default value)
+    .IsFull       = false, // No need to fill (set a default value)
+  },
+#endif
 };
 
 /*struct UART_Interface UART_Int0_I2C = // UART Interface generic
@@ -230,7 +270,7 @@ struct SC16IS7XX_UART UART_Chan0_I2C = // SC16IS7XX UART
 int32_t Baudrate_UART0_I2C;
 
 
-// UART0_I2C configured into RS-232 (57600-8-N-1), no control flow
+// UART0_I2C configured into RS-232 (115200-8-N-1), no control flow
 SC16IS7XX_UARTconfig UART0_I2C_RS232config =
 {
   //--- UART configuration ---
@@ -244,16 +284,17 @@ SC16IS7XX_UARTconfig UART0_I2C_RS232config =
   {
     .ControlFlowType  = SC16IS7XX_NO_CONTROL_FLOW,   // No control flow
   },
+  .UseSpecialChar     = false,                       // No special char on Xoff2
   .DisableTransmitter = false,                       // Enable transmitter
   .DisableReceiver    = false,                       // Enable receiver
 
   //--- FIFO configuration ---
   .UseFIFOs           = true,                        // Enable FIFO at startup
-  .TxTrigLvl          = SC16IS7XX_TX_FIFO_TRIGGER_AT_48_CHAR_SPACE,    // FIFO Tx trigger level used for interrupt generation
+  .TxTrigLvl          = SC16IS7XX_TX_FIFO_TRIGGER_AT_32_CHAR_SPACE,    // FIFO Tx trigger level used for interrupt generation
   .RxTrigLvl          = SC16IS7XX_RX_FIFO_TRIGGER_AT_4_CHAR_AVAILABLE, // FIFO Rx trigger level used for interrupt generation
 
   //--- Interrupt configuration ---
-  .Interrupts         = SC16IS7XX_RX_FIFO_INTERRUPT | SC16IS7XX_TX_FIFO_INTERRUPT, // Interrupt configuration of the UART
+  .Interrupts         = /*SC16IS7XX_RX_FIFO_INTERRUPT | */SC16IS7XX_TX_FIFO_INTERRUPT, // Interrupt configuration of the UART
 };
 
 //-----------------------------------------------------------------------------
@@ -264,13 +305,13 @@ SC16IS7XX_UARTconfig UART0_I2C_RS232config =
 
 //**********************************************************************************************************************************************************
 //=============================================================================
-// Configuration structure of the SC16IS752 on EXT2 with hard SPI0 on the V71
+// Device configuration structure of the SC16IS752 on EXT2 with hard SPI0 on the V71
 //=============================================================================
 struct SC16IS7XX SC16IS7XX_EXT2 =
 {
   //--- Device configuration ---
   .UserDriverData      = NULL,
-  .XtalFreq            = 1843200, // 1.8432MHz crystal
+  .XtalFreq            = 1843200, // 1.8432MHz Crystal
   .OscFreq             = 0,
   .DevicePN            = SC16IS752,
 
@@ -288,14 +329,20 @@ struct SC16IS7XX SC16IS7XX_EXT2 =
 SC16IS7XX_Config SC16IS7XX_EXT2_Config =
 {
   //--- GPIOs configuration ---
-  .StartupPinsDirection = 0x0, // Startup GPIOs direction (0 = set to '0' ; 1 = set to '1')
-  .StartupPinsLevel     = 0x0, // Startup GPIOs output level (0 = output ; 1 = input)
+  .StartupPinsDirection = 0x0, // Startup GPIOs direction (0 = output ; 1 = input)
+  .StartupPinsLevel     = 0x0, // Startup GPIOs output level (0 = set to '0' ; 1 = set to '1')
   .PinsInterruptEnable  = 0x0, // GPIOs individual Interrupt (0 = disable ; 1 = enable)
 };
 
 //-----------------------------------------------------------------------------
 
 
+
+//--- UART0_EXT2 buffers configuration ---
+#define UART0_EXT2_TXBUFFER_SIZE  200
+uint8_t UART0_EXT2_TxBuffer[UART0_EXT2_TXBUFFER_SIZE];
+#define UART0_EXT2_RXBUFFER_SIZE  200
+uint8_t UART0_EXT2_RxBuffer[UART0_EXT2_RXBUFFER_SIZE];
 
 // @warning Each Channel and Device tuple should be unique. Only 2 possible tuple on SC16IS752 devices
 //=============================================================================
@@ -305,10 +352,30 @@ struct SC16IS7XX_UART UART_Chan0_EXT2 = // SC16IS7XX UART
 {
   //--- UART configuration ---
   .Channel        = SC16IS7XX_CHANNEL_A,
-  .DriverConfig   = SC16IS7XX_DRIVER_BURST_TX | SC16IS7XX_DRIVER_BURST_RX,//SC16IS7XX_DRIVER_SAFE_TX | SC16IS7XX_DRIVER_SAFE_RX,
+  .DriverConfig   = SC16IS7XX_DRIVER_BURST_TX | SC16IS7XX_DRIVER_BURST_RX,
+//  .DriverConfig   = SC16IS7XX_DRIVER_SAFE_TX | SC16IS7XX_DRIVER_SAFE_RX,
   //--- Device configuration ---
   .UserDriverData = NULL,
   .Device         = SC16IS752_EXT2,
+
+#ifdef SC16IS7XX_USE_BUFFERS
+  .TxBuffer       =
+  {
+    .pData        = &UART0_EXT2_TxBuffer[0], // Set a Tx buffer
+    .BufferSize   = UART0_EXT2_TXBUFFER_SIZE,
+    .PosIn        = 0,     // No need to fill (will be changed at UART initialization)
+    .PosOut       = 0,     // No need to fill (will be changed at UART initialization)
+    .IsFull       = false, // No need to fill (will be changed at UART initialization)
+  },
+  .RxBuffer       =
+  {
+    .pData        = &UART0_EXT2_RxBuffer[0], // Set a Rx buffer
+    .BufferSize   = UART0_EXT2_RXBUFFER_SIZE,
+    .PosIn        = 0,     // No need to fill (will be changed at UART initialization)
+    .PosOut       = 0,     // No need to fill (will be changed at UART initialization)
+    .IsFull       = false, // No need to fill (will be changed at UART initialization)
+  },
+#endif
 };
 
 /*struct UART_Interface UART_Int0_EXT2 = // UART Interface generic
@@ -321,6 +388,13 @@ struct SC16IS7XX_UART UART_Chan0_EXT2 = // SC16IS7XX UART
   .Channel         = 0,
 };*/
 
+
+//--- UART1_EXT2 buffers configuration ---
+#define UART1_EXT2_TXBUFFER_SIZE  200
+uint8_t UART1_EXT2_TxBuffer[UART1_EXT2_TXBUFFER_SIZE];
+#define UART1_EXT2_RXBUFFER_SIZE  200
+uint8_t UART1_EXT2_RxBuffer[UART1_EXT2_RXBUFFER_SIZE];
+
 //=============================================================================
 // Channel 1 UART Configuration structure of SC16IS752_EXT2 (SC16IS7XX)
 //=============================================================================
@@ -328,10 +402,30 @@ struct SC16IS7XX_UART UART_Chan1_EXT2 = // SC16IS7XX UART
 {
   //--- UART configuration ---
   .Channel        = SC16IS7XX_CHANNEL_B,
-  .DriverConfig   = SC16IS7XX_DRIVER_BURST_TX | SC16IS7XX_DRIVER_BURST_RX,//SC16IS7XX_DRIVER_SAFE_TX | SC16IS7XX_DRIVER_SAFE_RX,
+  .DriverConfig   = SC16IS7XX_DRIVER_BURST_TX | SC16IS7XX_DRIVER_BURST_RX,
+//  .DriverConfig   = SC16IS7XX_DRIVER_SAFE_TX | SC16IS7XX_DRIVER_SAFE_RX,
   //--- Device configuration ---
   .UserDriverData = NULL,
   .Device         = SC16IS752_EXT2,
+
+#ifdef SC16IS7XX_USE_BUFFERS
+  .TxBuffer       =
+  {
+    .pData        = &UART1_EXT2_TxBuffer[0], // Set a Tx buffer
+    .BufferSize   = UART1_EXT2_TXBUFFER_SIZE,
+    .PosIn        = 0,     // No need to fill (will be changed at UART initialization)
+    .PosOut       = 0,     // No need to fill (will be changed at UART initialization)
+    .IsFull       = false, // No need to fill (will be changed at UART initialization)
+  },
+  .RxBuffer       =
+  {
+    .pData        = &UART1_EXT2_RxBuffer[0], // Set a Rx buffer
+    .BufferSize   = UART1_EXT2_RXBUFFER_SIZE,
+    .PosIn        = 0,     // No need to fill (will be changed at UART initialization)
+    .PosOut       = 0,     // No need to fill (will be changed at UART initialization)
+    .IsFull       = false, // No need to fill (will be changed at UART initialization)
+  },
+#endif
 };
 
 /*struct UART_Interface UART_Int1_EXT2 = // UART Interface generic
@@ -344,10 +438,10 @@ struct SC16IS7XX_UART UART_Chan1_EXT2 = // SC16IS7XX UART
   .Channel         = 1,
 };*/
 
-int32_t Baudrate_UART_Ext2;
+int32_t Baudrate_UART_EXT2;
 
 
-// UART_EXT2 configured into RS-232 (57600-8-N-1), no control flow
+// UART_EXT2 configured into RS-232 (115200-8-N-1), no control flow
 SC16IS7XX_UARTconfig UART_EXT2_RS232config =
 {
   //--- UART configuration ---
@@ -356,21 +450,22 @@ SC16IS7XX_UARTconfig UART_EXT2_RS232config =
   .UARTparity         = SC16IS7XX_NO_PARITY,         // No UART parity
   .UARTstopBit        = SC16IS7XX_STOP_BIT_1bit,     // UART 1-bit stop length
   .UARTbaudrate       = 115200,                      // UART desired baudrate 115200 bauds
-  .UARTbaudrateError  = &Baudrate_UART_Ext2,
+  .UARTbaudrateError  = &Baudrate_UART_EXT2,
   .RS232 =
   {
     .ControlFlowType  = SC16IS7XX_NO_CONTROL_FLOW,   // No control flow
   },
+  .UseSpecialChar     = false,                       // No special char on Xoff2
   .DisableTransmitter = false,                       // Enable transmitter
   .DisableReceiver    = false,                       // Enable receiver
 
   //--- FIFO configuration ---
   .UseFIFOs           = true,                        // Enable FIFO at startup
-  .TxTrigLvl          = SC16IS7XX_TX_FIFO_TRIGGER_AT_16_CHAR_SPACE,    // FIFO Tx trigger level used for interrupt generation
-  .RxTrigLvl          = SC16IS7XX_RX_FIFO_TRIGGER_AT_4_CHAR_AVAILABLE, // FIFO Rx trigger level used for interrupt generation
+  .TxTrigLvl          = SC16IS7XX_TX_FIFO_TRIGGER_AT_32_CHAR_SPACE,    // FIFO Tx trigger level used for interrupt generation
+  .RxTrigLvl          = SC16IS7XX_RX_FIFO_TRIGGER_AT_16_CHAR_AVAILABLE, // FIFO Rx trigger level used for interrupt generation
 
   //--- Interrupt configuration ---
-  .Interrupts         = SC16IS7XX_RX_FIFO_INTERRUPT | SC16IS7XX_TX_FIFO_INTERRUPT, // Interrupt configuration of the UART
+  .Interrupts         = SC16IS7XX_RX_FIFO_INTERRUPT/* | SC16IS7XX_TX_FIFO_INTERRUPT*/, // Interrupt configuration of the UART
 };
 
 //-----------------------------------------------------------------------------
