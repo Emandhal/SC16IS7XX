@@ -1,12 +1,11 @@
-/*******************************************************************************
+/*!*****************************************************************************
  * @file    SC16IS7XX.c
  * @author  Fabien 'Emandhal' MAILLY
  * @version 1.0.1
  * @date    20/09/2020
  * @brief   SC16IS740, SC16IS741, SC16IS741A, SC16IS750, SC16IS752, SC16IS760,
  *          SC16IS762 driver
- *
- * The SC16IS7XX component is a Single/Double UART with I2C-bus/SPI
+ * @details The SC16IS7XX component is a Single/Double UART with I2C-bus/SPI
  * interface, 64 bytes of transmit and receive FIFOs, IrDA SIR built-in support
  * Follow datasheet SC16IS740_750_760   Rev.7  ( 9 June  2011)
  *                  SC16IS741_1         Rev.01 (29 April 2010)
