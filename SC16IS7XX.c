@@ -118,9 +118,12 @@ eERRORRESULT Init_SC16IS7XX(SC16IS7XX *pComp, const SC16IS7XX_Config *pConf)
   if (pComp->Interface == SC16IS7XX_INTERFACE_I2C)
   {
     I2C_Interface* pI2C = GET_I2C_INTERFACE;
-#  if defined(CHECK_NULL_PARAM) && defined(USE_DYNAMIC_INTERFACE)
+# if defined(CHECK_NULL_PARAM)
+#   if defined(USE_DYNAMIC_INTERFACE)
+    if (pI2C == NULL) return ERR__PARAMETER_ERROR;
+#   endif
     if (pI2C->fnI2C_Init == NULL) return ERR__PARAMETER_ERROR;
-#  endif
+# endif
     if (pComp->InterfaceClockSpeed > SC16IS7XX_LIMITS[pComp->DevicePN].I2C_CLOCK_MAX) return ERR__I2C_CONFIG_ERROR;
     Error = pI2C->fnI2C_Init(pI2C, pComp->InterfaceClockSpeed);            // Initialize the I2C interface
     if (Error != ERR_OK) return Error;                                     // If there is an error while calling fnI2C_Init() then return the error
@@ -131,9 +134,12 @@ eERRORRESULT Init_SC16IS7XX(SC16IS7XX *pComp, const SC16IS7XX_Config *pConf)
   if (pComp->Interface == SC16IS7XX_INTERFACE_SPI)
   {
     SPI_Interface* pSPI = GET_SPI_INTERFACE;
-#  if defined(CHECK_NULL_PARAM) && defined(USE_DYNAMIC_INTERFACE)
+# if defined(CHECK_NULL_PARAM)
+#   if defined(USE_DYNAMIC_INTERFACE)
+    if (pSPI == NULL) return ERR__PARAMETER_ERROR;
+#   endif
     if (pSPI->fnSPI_Init == NULL) return ERR__PARAMETER_ERROR;
-#  endif
+# endif
     if (pComp->InterfaceClockSpeed > SC16IS7XX_LIMITS[pComp->DevicePN].SPI_CLOCK_MAX) return ERR__SPI_CONFIG_ERROR;
     Error = pSPI->fnSPI_Init(pSPI, pComp->SPIchipSelect, SPI_MODE0, pComp->InterfaceClockSpeed); // Initialize the SPI interface
     if (Error != ERR_OK) return Error;                                     // If there is an error while calling fnSPI_Init() then return the error
@@ -211,7 +217,10 @@ bool SC16IS7XX_IsReady(SC16IS7XX *pComp)
   if (pComp == NULL) return false;
 #endif
   I2C_Interface* pI2C = GET_I2C_INTERFACE;
-#if defined(CHECK_NULL_PARAM) && defined(USE_DYNAMIC_INTERFACE)
+#if defined(CHECK_NULL_PARAM)
+# if defined(USE_DYNAMIC_INTERFACE)
+  if (pI2C == NULL) return false;
+# endif
   if (pI2C->fnI2C_Transfer == NULL) return false;
 #endif
   I2CInterface_Packet PacketDesc = I2C_INTERFACE_NO_DATA_DESC(pComp->I2Caddress & I2C_WRITE_ANDMASK);
@@ -239,7 +248,10 @@ eERRORRESULT __SC16IS7XX_ReadData(SC16IS7XX *pComp, const eSC16IS7XX_Channel cha
   if (pComp->Interface == SC16IS7XX_INTERFACE_I2C)
   {
     I2C_Interface* pI2C = GET_I2C_INTERFACE;
-# if defined(CHECK_NULL_PARAM) && defined(USE_DYNAMIC_INTERFACE)
+# if defined(CHECK_NULL_PARAM)
+#   if defined(USE_DYNAMIC_INTERFACE)
+    if (pI2C == NULL) return ERR__PARAMETER_ERROR;
+#   endif
     if (pI2C->fnI2C_Transfer == NULL) return ERR__PARAMETER_ERROR;
 # endif
     uint8_t ChipAddrW = (pComp->I2Caddress & I2C_WRITE_ANDMASK);
@@ -259,7 +271,10 @@ eERRORRESULT __SC16IS7XX_ReadData(SC16IS7XX *pComp, const eSC16IS7XX_Channel cha
   if (pComp->Interface == SC16IS7XX_INTERFACE_SPI)
   {
     SPI_Interface* pSPI = GET_SPI_INTERFACE;
-# if defined(CHECK_NULL_PARAM) && defined(USE_DYNAMIC_INTERFACE)
+# if defined(CHECK_NULL_PARAM)
+#   if defined(USE_DYNAMIC_INTERFACE)
+    if (pSPI == NULL) return ERR__PARAMETER_ERROR;
+#   endif
     if (pSPI->fnSPI_Transfer == NULL) return ERR__PARAMETER_ERROR;
 # endif
     Address |= SC16IS7XX_SPI_READ;
@@ -304,7 +319,10 @@ eERRORRESULT __SC16IS7XX_WriteData(SC16IS7XX *pComp, const eSC16IS7XX_Channel ch
   if (pComp->Interface == SC16IS7XX_INTERFACE_I2C)
   {
     I2C_Interface* pI2C = GET_I2C_INTERFACE;
-# if defined(CHECK_NULL_PARAM) && defined(USE_DYNAMIC_INTERFACE)
+# if defined(CHECK_NULL_PARAM)
+#   if defined(USE_DYNAMIC_INTERFACE)
+    if (pI2C == NULL) return ERR__PARAMETER_ERROR;
+#   endif
     if (pI2C->fnI2C_Transfer == NULL) return ERR__PARAMETER_ERROR;
 # endif
     uint8_t ChipAddrW = (pComp->I2Caddress & I2C_WRITE_ANDMASK);
@@ -324,7 +342,10 @@ eERRORRESULT __SC16IS7XX_WriteData(SC16IS7XX *pComp, const eSC16IS7XX_Channel ch
   if (pComp->Interface == SC16IS7XX_INTERFACE_SPI)
   {
     SPI_Interface* pSPI = GET_SPI_INTERFACE;
-# if defined(CHECK_NULL_PARAM) && defined(USE_DYNAMIC_INTERFACE)
+# if defined(CHECK_NULL_PARAM)
+#   if defined(USE_DYNAMIC_INTERFACE)
+    if (pSPI == NULL) return ERR__PARAMETER_ERROR;
+#   endif
     if (pSPI->fnSPI_Transfer == NULL) return ERR__PARAMETER_ERROR;
 # endif
     //--- Send the address ---
