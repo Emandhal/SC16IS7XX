@@ -223,7 +223,7 @@ bool SC16IS7XX_IsReady(SC16IS7XX *pComp)
 # endif
   if (pI2C->fnI2C_Transfer == NULL) return false;
 #endif
-  I2CInterface_Packet PacketDesc = I2C_INTERFACE_NO_DATA_DESC(pComp->I2Caddress & I2C_WRITE_ANDMASK);
+  I2CInterface_Packet PacketDesc = I2C_INTERFACE8_NO_DATA_DESC(pComp->I2Caddress & I2C_WRITE_ANDMASK);
   return (pI2C->fnI2C_Transfer(pI2C, &PacketDesc) == ERR_OK); // Send only the chip address and get the Ack flag
 }
 #endif
@@ -258,12 +258,12 @@ eERRORRESULT __SC16IS7XX_ReadData(SC16IS7XX *pComp, const eSC16IS7XX_Channel cha
     uint8_t ChipAddrR = (ChipAddrW | I2C_READ_ORMASK);
 
     //--- Send the address ---
-    I2CInterface_Packet AddrPacketDesc = I2C_INTERFACE_TX_DATA_DESC(ChipAddrW, true, &Address, sizeof(uint8_t), false, I2C_WRITE_THEN_READ_FIRST_PART);
+    I2CInterface_Packet AddrPacketDesc = I2C_INTERFACE8_TX_DATA_DESC(ChipAddrW, true, &Address, sizeof(uint8_t), false, I2C_WRITE_THEN_READ_FIRST_PART);
     Error = pI2C->fnI2C_Transfer(pI2C, &AddrPacketDesc); // Transfer the address
     if (Error == ERR__I2C_NACK) return ERR__NOT_READY;   // If the device receive a NAK, then the device is not ready
     if (Error != ERR_OK) return Error;                   // If there is an error while calling fnI2C_Transfer() then return the Error
     //--- Get the data ---
-    I2CInterface_Packet DataPacketDesc = I2C_INTERFACE_RX_DATA_DESC(ChipAddrR, true, data, size, true, I2C_WRITE_THEN_READ_SECOND_PART);
+    I2CInterface_Packet DataPacketDesc = I2C_INTERFACE8_RX_DATA_DESC(ChipAddrR, true, data, size, true, I2C_WRITE_THEN_READ_SECOND_PART);
     Error = pI2C->fnI2C_Transfer(pI2C, &DataPacketDesc); // Restart at first data read transfer, get the data and stop transfer at last byte
   }
 #endif
@@ -328,13 +328,13 @@ eERRORRESULT __SC16IS7XX_WriteData(SC16IS7XX *pComp, const eSC16IS7XX_Channel ch
     uint8_t ChipAddrW = (pComp->I2Caddress & I2C_WRITE_ANDMASK);
 
     //--- Send the address ---
-    I2CInterface_Packet AddrPacketDesc = I2C_INTERFACE_TX_DATA_DESC(ChipAddrW, true, &Address, sizeof(uint8_t), false, I2C_WRITE_THEN_WRITE_FIRST_PART);
+    I2CInterface_Packet AddrPacketDesc = I2C_INTERFACE8_TX_DATA_DESC(ChipAddrW, true, &Address, sizeof(uint8_t), false, I2C_WRITE_THEN_WRITE_FIRST_PART);
     Error = pI2C->fnI2C_Transfer(pI2C, &AddrPacketDesc);              // Transfer the address
     if (Error == ERR__I2C_NACK) return ERR__NOT_READY;                // If the device receive a NAK, then the device is not ready
     if (Error == ERR__I2C_NACK_DATA) return ERR__I2C_INVALID_ADDRESS; // If the device receive a NAK while transferring data, then this is an invalid address
     if (Error != ERR_OK) return Error;                                // If there is an error while calling fnI2C_Transfer() then return the Error
     //--- Send the data ---
-    I2CInterface_Packet DataPacketDesc = I2C_INTERFACE_TX_DATA_DESC(ChipAddrW, false, data, size, true, I2C_WRITE_THEN_WRITE_SECOND_PART);
+    I2CInterface_Packet DataPacketDesc = I2C_INTERFACE8_TX_DATA_DESC(ChipAddrW, false, data, size, true, I2C_WRITE_THEN_WRITE_SECOND_PART);
     Error = pI2C->fnI2C_Transfer(pI2C, &DataPacketDesc);              // Continue by transferring the data, and stop transfer at last byte
   }
 #endif
