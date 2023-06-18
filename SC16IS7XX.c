@@ -1,8 +1,8 @@
 /*!*****************************************************************************
  * @file    SC16IS7XX.c
  * @author  Fabien 'Emandhal' MAILLY
- * @version 1.0.1
- * @date    20/09/2020
+ * @version 1.0.2
+ * @date    18/06/2023
  * @brief   SC16IS740, SC16IS741, SC16IS741A, SC16IS750, SC16IS752, SC16IS760,
  *          SC16IS762 driver
  * @details The SC16IS7XX component is a Single/Double UART with I2C-bus/SPI
@@ -470,16 +470,14 @@ eERRORRESULT SC16IS7XX_ConfigureGPIOs(SC16IS7XX *pComp, uint8_t pinsDirection, u
   if (pComp == NULL) return ERR__PARAMETER_ERROR;
 #endif
   eERRORRESULT Error;
-  if (SC16IS7XX_LIMITS[pComp->DevicePN].HAVE_GPIO == false) return ERR__NOT_SUPPORTED;                     // Only if the device have I/O pins
+  if (SC16IS7XX_LIMITS[pComp->DevicePN].HAVE_GPIO == false) return ERR__NOT_SUPPORTED; // Only if the device have I/O pins
 
-  Error = SC16IS7XX_WriteRegister(pComp, SC16IS7XX_NO_CHANNEL, RegSC16IS7XX_IODir, pinsDirection);         // Write the IODir register
-  if (Error != ERR_OK) return Error;                                                                       // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
-  Error = SC16IS7XX_WriteRegister(pComp, SC16IS7XX_NO_CHANNEL, RegSC16IS7XX_IOState, pinsLevel);           // Write the IOState register
-  if (Error != ERR_OK) return Error;                                                                       // If there is an error while calling SC16IS7XX_WriteRegister() then return the error
-  pComp->GPIOsOutState = pinsLevel;                                                                        // Save setted GPIOs state level
-  return SC16IS7XX_WriteRegister(pComp, SC16IS7XX_NO_CHANNEL, RegSC16IS7XX_IOIntEna, pinsInterruptEnable); // Write the IOIntEna register
+  Error = SC16IS7XX_SetGPIOPinsDirection(pComp, pinsDirection, 0xFF);                  // Write the GPIOs pin direction
+  if (Error != ERR_OK) return Error;                                                   // If there is an error while calling SC16IS7XX_SetGPIOPinsDirection() then return the error
+  Error = SC16IS7XX_SetGPIOPinsOutputLevel(pComp, pinsLevel, 0xFF);                    // Write the GPIOs output level
+  if (Error != ERR_OK) return Error;                                                   // If there is an error while calling SC16IS7XX_SetGPIOPinsOutputLevel() then return the error
+  return SC16IS7XX_SetGPIOPinsInterruptEnable(pComp, pinsInterruptEnable, 0xFF);       // Write the pin interrupt enable
 }
-
 
 
 //=============================================================================
@@ -491,20 +489,10 @@ eERRORRESULT SC16IS7XX_SetGPIOPinsDirection(SC16IS7XX *pComp, const uint8_t pins
   if (pComp == NULL) return ERR__PARAMETER_ERROR;
 #endif
   if (SC16IS7XX_LIMITS[pComp->DevicePN].HAVE_GPIO == false) return ERR__NOT_SUPPORTED; // Only if the device have I/O pins
-  return SC16IS7XX_ModifyRegister(pComp, SC16IS7XX_NO_CHANNEL, RegSC16IS7XX_IODir, ~pinsDirection, pinsChangeMask); // Invert pin direction to fit GPIO_Interface logic
+  pComp->GPIOsOutDir &= ~pinsChangeMask;                                               // Force change bits to 0
+  pComp->GPIOsOutDir |= (~pinsDirection & pinsChangeMask);                             // Apply new direction only on changed pins. Invert pin direction to fit GPIO_Interface logic
+  return SC16IS7XX_WriteRegister(pComp, SC16IS7XX_NO_CHANNEL, RegSC16IS7XX_IODir, pComp->GPIOsOutDir);
 }
-
-#ifdef USE_GENERICS_DEFINED
-eERRORRESULT SC16IS7XX_SetGPIOPinsDirection_Gen(GPIO_Interface *pIntDev, const uint32_t pinsDirection, const uint32_t pinsChangeMask)
-{
-#ifdef CHECK_NULL_PARAM
-  if (pIntDev == NULL) return ERR__PARAMETER_ERROR;
-#endif
-  SC16IS7XX* pDevice = (SC16IS7XX*)(pIntDev->InterfaceDevice); // Get the SC16IS7XX device of this GPIO port
-  return SC16IS7XX_SetGPIOPinsDirection(pDevice, (const uint8_t)pinsDirection, (const uint8_t)pinsChangeMask);
-}
-#endif
-
 
 
 //=============================================================================
@@ -519,21 +507,6 @@ eERRORRESULT SC16IS7XX_GetGPIOPinsInputLevel(SC16IS7XX *pComp, uint8_t *pinsStat
   return SC16IS7XX_ReadRegister(pComp, SC16IS7XX_NO_CHANNEL, RegSC16IS7XX_IOState, pinsState); // Read the IOState register
 }
 
-#ifdef USE_GENERICS_DEFINED
-eERRORRESULT SC16IS7XX_GetGPIOPinsInputLevel_Gen(GPIO_Interface *pIntDev, uint32_t *pinsState)
-{
-#ifdef CHECK_NULL_PARAM
-  if (pIntDev == NULL) return ERR__PARAMETER_ERROR;
-#endif
-  SC16IS7XX* pDevice = (SC16IS7XX*)(pIntDev->InterfaceDevice); // Get the SC16IS7XX device of this GPIO port
-  uint8_t PinValue;
-  eERRORRESULT Error = SC16IS7XX_GetGPIOPinsInputLevel(pDevice, &PinValue);
-  *pinsState = (uint32_t)PinValue;
-  return Error;
-}
-#endif
-
-
 
 //=============================================================================
 // Set I/O pins output level of the SC16IS7XX
@@ -544,22 +517,122 @@ eERRORRESULT SC16IS7XX_SetGPIOPinsOutputLevel(SC16IS7XX *pComp, const uint8_t pi
   if (pComp == NULL) return ERR__PARAMETER_ERROR;
 #endif
   if (SC16IS7XX_LIMITS[pComp->DevicePN].HAVE_GPIO == false) return ERR__NOT_SUPPORTED;                     // Only if the device have I/O pins
-
-  pComp->GPIOsOutState &= ~pinsChangeMask;                                                                 // Force change bits to 0
-  pComp->GPIOsOutState |= (pinsLevel & pinsChangeMask);                                                    // Apply new output level only on changed pins
-  return SC16IS7XX_WriteRegister(pComp, SC16IS7XX_NO_CHANNEL, RegSC16IS7XX_IOState, pComp->GPIOsOutState); // Write the IOState register
+  pComp->GPIOsOutLevel &= ~pinsChangeMask;                                                                 // Force change bits to 0
+  pComp->GPIOsOutLevel |= (pinsLevel & pinsChangeMask);                                                    // Apply new output level only on changed pins
+  return SC16IS7XX_WriteRegister(pComp, SC16IS7XX_NO_CHANNEL, RegSC16IS7XX_IOState, pComp->GPIOsOutLevel); // Write the IOState register
 }
+
+//-----------------------------------------------------------------------------
+
+
 
 #ifdef USE_GENERICS_DEFINED
-eERRORRESULT SC16IS7XX_SetGPIOPinsOutputLevel_Gen(GPIO_Interface *pIntDev, const uint32_t pinsLevel, const uint32_t pinsChangeMask)
+
+//=============================================================================
+// Set PORT direction of the SC16IS7XX device
+//=============================================================================
+eERRORRESULT SC16IS7XX_SetPORTdirection_Gen(PORT_Interface *pIntDev, const uint32_t pinsDirection)
 {
 #ifdef CHECK_NULL_PARAM
-  if (pIntDev == NULL) return ERR__PARAMETER_ERROR;
+  if (pIntDev == NULL) return ERR__NULL_POINTER;
 #endif
-  SC16IS7XX* pDevice = (SC16IS7XX*)(pIntDev->InterfaceDevice); // Get the SC16IS7XX device of this GPIO port
-  return SC16IS7XX_SetGPIOPinsOutputLevel(pDevice, (const uint8_t)pinsLevel, (const uint8_t)pinsChangeMask);
+  if (pIntDev->UniqueID != SC16IS7XX_UNIQUE_ID) return ERR__UNKNOWN_ELEMENT;
+  SC16IS7XX* pDevice = (SC16IS7XX*)(pIntDev->InterfaceDevice);       // Get the MCP251XFD device of this GPIO port
+#ifdef CHECK_NULL_PARAM
+  if (pDevice == NULL) return ERR__UNKNOWN_DEVICE;
+#endif
+  return SC16IS7XX_SetGPIOPinsDirection(pDevice, (uint8_t)pinsDirection, 0xFF);
 }
+
+
+//=============================================================================
+// Get PORT pins input level of the SC16IS7XX device
+//=============================================================================
+eERRORRESULT SC16IS7XX_GetPORTinputLevel_Gen(PORT_Interface *pIntDev, uint32_t *pinsLevel)
+{
+#ifdef CHECK_NULL_PARAM
+  if (pIntDev == NULL) return ERR__NULL_POINTER;
 #endif
+  if (pIntDev->UniqueID != SC16IS7XX_UNIQUE_ID) return ERR__UNKNOWN_ELEMENT;
+  SC16IS7XX* pDevice = (SC16IS7XX*)(pIntDev->InterfaceDevice); // Get the MCP251XFD device of this GPIO port
+#ifdef CHECK_NULL_PARAM
+  if (pDevice == NULL) return ERR__UNKNOWN_DEVICE;
+#endif
+  uint8_t Value = 0;
+  eERRORRESULT Error = SC16IS7XX_GetGPIOPinsInputLevel(pDevice, &Value);
+  *pinsLevel = Value;
+  return Error;
+}
+
+
+//=============================================================================
+// Set PORT pins output level of the SC16IS7XX device
+//=============================================================================
+eERRORRESULT SC16IS7XX_SetPORToutputLevel_Gen(PORT_Interface *pIntDev, const uint32_t pinsLevel)
+{
+#ifdef CHECK_NULL_PARAM
+  if (pIntDev == NULL) return ERR__NULL_POINTER;
+#endif
+  if (pIntDev->UniqueID != SC16IS7XX_UNIQUE_ID) return ERR__UNKNOWN_ELEMENT;
+  SC16IS7XX* pDevice = (SC16IS7XX*)(pIntDev->InterfaceDevice);   // Get the MCP251XFD device of this GPIO port
+#ifdef CHECK_NULL_PARAM
+  if (pDevice == NULL) return ERR__UNKNOWN_DEVICE;
+#endif
+  return SC16IS7XX_SetGPIOPinsOutputLevel(pDevice, (uint8_t)pinsLevel, 0xFF);
+}
+
+//-----------------------------------------------------------------------------
+
+
+
+//=============================================================================
+// Set a pin on PORT direction of the SC16IS7XX device
+//=============================================================================
+eERRORRESULT SC16IS7XX_SetPinState_Gen(GPIO_Interface *pIntDev, const eGPIO_State pinState)
+{
+#ifdef CHECK_NULL_PARAM
+  if (pIntDev == NULL) return ERR__NULL_POINTER;
+#endif
+  if (pIntDev->UniqueID != SC16IS7XX_UNIQUE_ID) return ERR__UNKNOWN_ELEMENT;
+  SC16IS7XX* pDevice = (SC16IS7XX*)(pIntDev->InterfaceDevice); // Get the MCP251XFD device of this GPIO port
+#ifdef CHECK_NULL_PARAM
+  if (pDevice == NULL) return ERR__UNKNOWN_DEVICE;
+#endif
+  switch (pinState)
+  {
+    default: break;
+    case GPIO_STATE_OUTPUT: return SC16IS7XX_SetGPIOPinsDirection(pDevice, 0x00, pIntDev->PinBitMask);
+    case GPIO_STATE_INPUT : return SC16IS7XX_SetGPIOPinsDirection(pDevice, pIntDev->PinBitMask, pIntDev->PinBitMask);
+    case GPIO_STATE_RESET : return SC16IS7XX_SetGPIOPinsOutputLevel(pDevice, 0x00, pIntDev->PinBitMask);
+    case GPIO_STATE_SET   : return SC16IS7XX_SetGPIOPinsOutputLevel(pDevice, pIntDev->PinBitMask, pIntDev->PinBitMask);
+    case GPIO_STATE_TOGGLE: return SC16IS7XX_SetGPIOPinsOutputLevel(pDevice, pDevice->GPIOsOutLevel ^ (uint8_t)pIntDev->PinBitMask, pIntDev->PinBitMask);
+  }
+  return ERR__PARAMETER_ERROR;
+}
+
+
+//=============================================================================
+// Get a pin on PORT input level of the SC16IS7XX device
+//=============================================================================
+eERRORRESULT SC16IS7XX_GetPinInputLevel_Gen(GPIO_Interface *pIntDev, eGPIO_State *pinLevel)
+{
+#ifdef CHECK_NULL_PARAM
+  if (pIntDev == NULL) return ERR__NULL_POINTER;
+#endif
+  if (pIntDev->UniqueID != SC16IS7XX_UNIQUE_ID) return ERR__UNKNOWN_ELEMENT;
+  SC16IS7XX* pDevice = (SC16IS7XX*)(pIntDev->InterfaceDevice); // Get the MCP251XFD device of this GPIO port
+#ifdef CHECK_NULL_PARAM
+  if (pDevice == NULL) return ERR__UNKNOWN_DEVICE;
+#endif
+  uint8_t PinState = 0;
+  eERRORRESULT Error = SC16IS7XX_GetGPIOPinsInputLevel(pDevice, &PinState);
+  *pinLevel = (PinState > 0 ? GPIO_STATE_SET : GPIO_STATE_RESET);
+  return Error;
+}
+
+#endif
+
+//-----------------------------------------------------------------------------
 
 
 
@@ -571,9 +644,11 @@ eERRORRESULT SC16IS7XX_SetGPIOPinsInterruptEnable(SC16IS7XX *pComp, uint8_t pins
 #ifdef CHECK_NULL_PARAM
   if (pComp == NULL) return ERR__PARAMETER_ERROR;
 #endif
-  if (SC16IS7XX_LIMITS[pComp->DevicePN].HAVE_GPIO == false) return ERR__NOT_SUPPORTED;         // Only if the device have I/O pins
+  if (SC16IS7XX_LIMITS[pComp->DevicePN].HAVE_GPIO == false) return ERR__NOT_SUPPORTED; // Only if the device have I/O pins
   return SC16IS7XX_ModifyRegister(pComp, SC16IS7XX_NO_CHANNEL, RegSC16IS7XX_IOIntEna, pinsIntEna, pinsChangeMask);
 }
+
+//-----------------------------------------------------------------------------
 
 
 

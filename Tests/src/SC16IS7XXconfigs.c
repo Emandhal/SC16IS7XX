@@ -93,7 +93,7 @@ struct SC16IS7XX SC16IS7XX_EXT1 =
   .InterfaceClockSpeed = 4000000, // SPI speed at 4MHz
 
   //--- GPIO configuration ---
-  .GPIOsOutState       = 0, // No GPIO on this device
+  .GPIOsOutLevel       = 0, // No GPIO on this device
 };
 
 
@@ -207,7 +207,7 @@ struct SC16IS7XX SC16IS7XX_I2C =
   .InterfaceClockSpeed = 400000, // I2C speed at 400kHz
 
   //--- GPIO configuration ---
-  .GPIOsOutState       = 0, // Set all GPIO to 0
+  .GPIOsOutLevel       = 0, // Set all GPIO to 0
 };
 
 
@@ -322,7 +322,7 @@ struct SC16IS7XX SC16IS7XX_EXT2 =
   .InterfaceClockSpeed = 4000000, // SPI speed at 4MHz
 
   //--- GPIO configuration ---
-  .GPIOsOutState       = 0, // Set all GPIO to 0
+  .GPIOsOutLevel       = 0, // Set all GPIO to 0
 };
 
 

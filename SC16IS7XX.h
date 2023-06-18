@@ -1,8 +1,8 @@
 /*!*****************************************************************************
  * @file    SC16IS7XX.h
  * @author  Fabien 'Emandhal' MAILLY
- * @version 1.0.1
- * @date    20/09/2020
+ * @version 1.0.2
+ * @date    18/06/2023
  * @brief   SC16IS740, SC16IS741, SC16IS741A, SC16IS750, SC16IS752, SC16IS760,
  *          SC16IS762 driver
  * @details The SC16IS7XX component is a Single/Double UART with I2C-bus/SPI
@@ -17,7 +17,7 @@
  ******************************************************************************/
 /* @page License
  *
- * Copyright (c) 2020-2022 Fabien MAILLY
+ * Copyright (c) 2020-2023 Fabien MAILLY
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -39,6 +39,7 @@
  *****************************************************************************/
 
 /* Revision history:
+ * 1.0.1    GPIO interface rework
  * 1.0.1    I2C interface rework for I2C DMA use and polling
  *          Add Tx and Rx ring buffers
  * 1.0.0    Release version
@@ -955,8 +956,12 @@ struct SC16IS7XX
   uint32_t InterfaceClockSpeed;   //!< SPI/I2C clock speed in Hertz
 
   //--- GPIO configuration ---
-  uint8_t GPIOsOutState;          //!< GPIOs pins output state (0 = set to '0' ; 1 = set to '1'). Used to speed up output change
+  uint8_t GPIOsOutDir;            //!< GPIOs pins direction (0 = set to output ; 1 = set to input). Used to speed up direction change
+  uint8_t GPIOsOutLevel;          //!< GPIOs pins output level (0 = set to '0' ; 1 = set to '1'). Used to speed up output change
 };
+
+//! This unique ID is a helper for pointer recognition when using USE_GENERICS_DEFINED for generic call of GPIO or PORT use (using GPIO_Interface.h)
+#define SC16IS7XX_UNIQUE_ID  ( (((uint32_t)'S' << 0) ^ ((uint32_t)'C' << 3) ^ ((uint32_t)'1' << 6) ^ ((uint32_t)'6' << 9) ^ ((uint32_t)'I' << 12) ^ ((uint32_t)'S' << 15) ^ ((uint32_t)'7' << 18) ^ ((uint32_t)'X' << 21) ^ ((uint32_t)'X' << 23)) + __LINE__ + (sizeof(struct SC16IS7XX) << 19) )
 
 //-----------------------------------------------------------------------------
 
@@ -1132,9 +1137,6 @@ eERRORRESULT SC16IS7XX_ConfigureGPIOs(SC16IS7XX *pComp, uint8_t pinsDirection, u
  * @return Returns an #eERRORRESULT value enum
  */
 eERRORRESULT SC16IS7XX_SetGPIOPinsDirection(SC16IS7XX *pComp, const uint8_t pinsDirection, const uint8_t pinsChangeMask);
-#ifdef USE_GENERICS_DEFINED
-eERRORRESULT SC16IS7XX_SetGPIOPinsDirection_Gen(GPIO_Interface *pIntDev, const uint32_t pinsDirection, const uint32_t pinsChangeMask);
-#endif
 
 /*! @brief Get I/O pins input level of the SC16IS75X/76X
  *
@@ -1143,9 +1145,6 @@ eERRORRESULT SC16IS7XX_SetGPIOPinsDirection_Gen(GPIO_Interface *pIntDev, const u
  * @return Returns an #eERRORRESULT value enum
  */
 eERRORRESULT SC16IS7XX_GetGPIOPinsInputLevel(SC16IS7XX *pComp, uint8_t *pinsState);
-#ifdef USE_GENERICS_DEFINED
-eERRORRESULT SC16IS7XX_GetGPIOPinsInputLevel_Gen(GPIO_Interface *pIntDev, uint32_t *pinsState);
-#endif
 
 /*! @brief Set I/O pins output level of the SC16IS75X/76X
  *
@@ -1155,9 +1154,60 @@ eERRORRESULT SC16IS7XX_GetGPIOPinsInputLevel_Gen(GPIO_Interface *pIntDev, uint32
  * @return Returns an #eERRORRESULT value enum
  */
 eERRORRESULT SC16IS7XX_SetGPIOPinsOutputLevel(SC16IS7XX *pComp, const uint8_t pinsLevel, const uint8_t pinsChangeMask);
+
+//-----------------------------------------------------------------------------
+
+
+
 #ifdef USE_GENERICS_DEFINED
-eERRORRESULT SC16IS7XX_SetGPIOPinsOutputLevel_Gen(GPIO_Interface *pIntDev, const uint32_t pinsLevel, const uint32_t pinsChangeMask);
+/*! @brief Set PORT direction of the SC16IS7XX device
+ *
+ * @param[in] *pIntDev Is the pointed structure of the GPIO interface to be used
+ * @param[in] pinsDirection Set the IO pins output level, if bit is '1' then the corresponding GPIO is level high else it's level low
+ * @return Returns an #eERRORRESULT value enum
+ */
+eERRORRESULT SC16IS7XX_SetPORTdirection_Gen(PORT_Interface *pIntDev, const uint32_t pinsDirection);
+
+/*! @brief Get PORT pins input level of the SC16IS7XX device
+ *
+ * @param[in] *pIntDev Is the PORT interface container structure used to get input level of a whole PORT
+ * @param[out] *pinsLevel Return the actual level of the PORT pins. If bit is '1' then the corresponding GPIO is level high else it's level low
+ * @return Returns an #eERRORRESULT value enum
+ */
+eERRORRESULT SC16IS7XX_GetPORTinputLevel_Gen(PORT_Interface *pIntDev, uint32_t *pinsLevel);
+
+/*! @brief Set PORT pins output level of the SC16IS7XX device
+ *
+ * @param[in] *pIntDev Is the PORT interface container structure used to set output level of a whole PORT
+ * @param[in] pinsLevel Set the PORT pins output level, if bit is '1' then the corresponding GPIO is level high else it's level low
+ * @return Returns an #eERRORRESULT value enum
+ */
+eERRORRESULT SC16IS7XX_SetPORToutputLevel_Gen(PORT_Interface *pIntDev, const uint32_t pinsLevel);
+
+//-----------------------------------------------------------------------------
+
+
+/*! @brief Set a pin on PORT direction of the SC16IS7XX device
+ *
+ * This function will be called to change the direction of the GPIO
+ * @param[in] *pIntDev Is the GPIO interface container structure used for the GPIO set direction
+ * @param[in] pinState Set the GPIO state following #eGPIO_State enumerator
+ * @return Returns an #eERRORRESULT value enum
+ */
+eERRORRESULT SC16IS7XX_SetPinState_Gen(GPIO_Interface *pIntDev, const eGPIO_State pinState);
+
+/*! @brief Get a pin on PORT input level of the SC16IS7XX device
+ *
+ * @param[in] *pIntDev Is the GPIO interface container structure used for the GPIO get input level
+ * @param[out] *pinLevel Return the actual level of the I/O pin
+ * @return Returns an #eERRORRESULT value enum
+ */
+eERRORRESULT SC16IS7XX_GetPinInputLevel_Gen(GPIO_Interface *pIntDev, eGPIO_State *pinLevel);
+
 #endif
+
+//-----------------------------------------------------------------------------
+
 
 /*! @brief Set I/O pins interrupt enable of the SC16IS75X/76X
  *
