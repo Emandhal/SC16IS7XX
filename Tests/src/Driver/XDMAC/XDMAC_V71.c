@@ -1,13 +1,11 @@
-/*******************************************************************************
-    File name:    XDMAC_V71.c
-    Author:       FMA
-    Version:      1.0
-    Date (d/m/y): 18/04/2021
-    Description:  XDMAC driver for Atmel MCUs
-                  This interface implements a driver the the XDMAC of the SAM V71
-
-    History :
-*******************************************************************************/
+/*!*****************************************************************************
+ * @file    XDMAC_V71.c
+ * @author  Fabien 'Emandhal' MAILLY
+ * @version 1.0.0
+ * @date    18/04/2021
+ * @brief   XDMAC driver for Atmel MCUs
+ * @details This interface implements a driver the the XDMAC of the SAM V71
+ ******************************************************************************/
 
 //-----------------------------------------------------------------------------
 #include "XDMAC_V71.h"

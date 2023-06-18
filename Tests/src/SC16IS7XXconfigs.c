@@ -45,13 +45,13 @@ SPI_Config SPI0_Config =
   .CSdecoder       = false,
   .ModeFaultDetect = false,
   .WaitRead        = true,
-  .DLYBCS          = SPI_DLYBCS,
+  .DLYBCS_ns       = SPI_DLYBCS,
   .CSR             =
   {
-    { .DLYBCT = SPI_DLYBCT, .DLYBS = SPI_DLYBS, .BITS = 8, .CSB = SPI_CS_KEEP_LOW, },
-    { .DLYBCT = SPI_DLYBCT, .DLYBS = SPI_DLYBS, .BITS = 8, .CSB = SPI_CS_KEEP_LOW, },
-    { .DLYBCT = SPI_DLYBCT, .DLYBS = SPI_DLYBS, .BITS = 8, .CSB = SPI_CS_KEEP_LOW, },
-    { .DLYBCT = SPI_DLYBCT, .DLYBS = SPI_DLYBS, .BITS = 8, .CSB = SPI_CS_KEEP_LOW, },
+    { .DLYBCT_ns = SPI_DLYBCT, .DLYBS_ns = SPI_DLYBS, .BitsPerTransfer = 8, .CSbehavior = SPI_CS_KEEP_LOW, },
+    { .DLYBCT_ns = SPI_DLYBCT, .DLYBS_ns = SPI_DLYBS, .BitsPerTransfer = 8, .CSbehavior = SPI_CS_KEEP_LOW, },
+    { .DLYBCT_ns = SPI_DLYBCT, .DLYBS_ns = SPI_DLYBS, .BitsPerTransfer = 8, .CSbehavior = SPI_CS_KEEP_LOW, },
+    { .DLYBCT_ns = SPI_DLYBCT, .DLYBS_ns = SPI_DLYBS, .BitsPerTransfer = 8, .CSbehavior = SPI_CS_KEEP_LOW, },
   },
 };
 //-----------------------------------------------------------------------------

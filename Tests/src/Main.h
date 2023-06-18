@@ -1,15 +1,20 @@
+/*!*****************************************************************************
+ * @file    Main.h
+ * @author  Fabien 'Emandhal' MAILLY
+ * @version 1.0.0
+ * @date    04/06/2023
+ * @brief   System configuration
+ ******************************************************************************/
 #ifndef MAIN_H_
 #define MAIN_H_
+//=============================================================================
+#define USE_CONSOLE_TX
+#define USE_CONSOLE_RX
 //-----------------------------------------------------------------------------
 #include <stdint.h>
+#include <asf.h> // Use Atmel Software Framework (ASF)
 #include "conf_board.h"
-#include "Conf_Console.h"
-#include "Console.h"
 #include "ErrorsDef.h"
-#include "Interface/Console_V71Interface.h"
-#include "StringTools.h"
-#include "TWIHS_V71.h"
-#include "SPI_V71.h"
 //-----------------------------------------------------------------------------
 
 

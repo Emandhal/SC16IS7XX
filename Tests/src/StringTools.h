@@ -1,10 +1,10 @@
-/*******************************************************************************
-    File name:    StringTools.h
-    Author:       FMA
-    Version:      1.0
-    Date (d/m/y): 15/02/2021
-    Description:  Tool to convert data to string and string to data in fixed
-                  buffers
+/*!*****************************************************************************
+ * @file    StringTools.h
+ * @author  Fabien 'Emandhal' MAILLY
+ * @version 1.0.0
+ * @date    15/02/2021
+ * @brief   Tool to convert data to string and string to data in fixed buffers
+ ******************************************************************************/
 
     History :
 *******************************************************************************/
@@ -18,37 +18,61 @@
 #include <stddef.h>
 #include <stdlib.h>
 //-----------------------------------------------------------------------------
-/// @cond 0
-/**INDENT-OFF**/
 #ifdef __cplusplus
 extern "C" {
 #endif
-/**INDENT-ON**/
-/// @endcond
 //-----------------------------------------------------------------------------
 
 
 
+//**********************************************************************************************************************************************************
 
-
-/*! @brief Convert a char to a digit value
- *
- * @param[in] aChar The char to convert
- * @return return the digit value
+/*! @brief Compare 2 ANSI strings by only the size of the str2
+ * @param[in] *pStr1 Is the string to compare
+ * @param[in] *pStr2 Is the string to compare. It is also the max size to compare
+ * @return Returns the value extracted from string
  */
-inline uint32_t CharToDigit(const char aChar)
-{
-  return (uint32_t)(aChar - '0');
-}
+int32_t strscmp(const char* str1, const char* str2);
+
+/*! @brief Compare 2 ANSI strings by only the size of the str2 and update Str1 pointer only if strings are identical
+ * @param[in] *pStr1 Is the string to compare (the original pointer will be advanced) and returns the new position in the string, or the end of the string
+ * @param[in] *pStr2 Is the string to compare. It is also the max size to compare
+ * @return Returns the value extracted from string
+ */
+int32_t strtcmp(const char** str1, const char* str2);
+
+//-----------------------------------------------------------------------------
 
 
-//! Macro to get the lower case of a char
-#define LowerCase(x)  ( ((((unsigned int)(x)) - 'A') < 26) ? (x) + 32 : (x) )
 
 //**********************************************************************************************************************************************************
 
+/*! @brief Convert a string to int float
+ * This function will stop parsing at first char not in '0'..'9'
+ * @param[in/out] **pStr Is the string to parse (the original pointer will be advanced) and returns the new position in the string, or the end of the string
+ * @return Returns the value extracted from string
+ */
+int32_t StringToInt(char** pStr);
+
+/*! @brief Hex string to value
+ * This function will stop parsing at first char not in '0'..'9', 'a'..'f', 'A'..'F'
+ * @param[in/out] **pStr Is the string to parse (the original pointer will be advanced) and returns the new position in the string, or the end of the string
+ * @return Returns the value extracted
+ */
+uint32_t HexStringToUint(char** pStr);
+
+/*! @brief Bin string to value
+ * This function will stop parsing at first char not in '0'..'1'
+ * @param[in/out] **pStr Is the string to parse (the original pointer will be advanced) and returns the new position in the string, or the end of the string
+ * @return Returns the value extracted
+ */
+uint32_t BinStringToUint(char** pStr);
+
+//-----------------------------------------------------------------------------
 
 
+
+//**********************************************************************************************************************************************************
 /*! @brief Convert a uint32_t to String
  *
  * @param[in] num The decimal number to be converted
@@ -56,7 +80,6 @@ inline uint32_t CharToDigit(const char aChar)
  * @return Length of the buffer
  */
 uint32_t Uint32_ToStr(uint32_t num, char* buff);
-
 
 /*! @brief Convert a string to int32 by reference
  *
@@ -66,7 +89,6 @@ uint32_t Uint32_ToStr(uint32_t num, char* buff);
  * @return The new char* position
  */
 char* String_ToInt32ByRef(char* buff, int32_t* result);
-
 
 /*! @brief Convert a String to int32
  *
@@ -122,7 +144,7 @@ uint32_t HexString_ToUint32(const char* srcString);
 /*! @brief Convert an hexadecimal string to uint32 by reference
  *
  * If too many char are present, the result may be uncertain. If a wrong character is found, the result is the value found and the value returned is a pointer to the wrong character
- * @param[in] *buff Buffer of char where the string int32 is stored with a null terminal
+ * @param[in] *srcString Is the hexadecimal string to convert
  * @param[out] *result Is the result of the conversion
  * @return The new char* position
  */
@@ -181,12 +203,8 @@ size_t Float_ToString(float Val, char* buff, size_t buffSize, uint32_t IntDigits
 
 
 //-----------------------------------------------------------------------------
-/// @cond 0
-/**INDENT-OFF**/
 #ifdef __cplusplus
 }
 #endif
-/**INDENT-ON**/
-/// @endcond
 //-----------------------------------------------------------------------------
 #endif /* STRING_TOOLS_H_INC */

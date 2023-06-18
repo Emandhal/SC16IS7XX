@@ -15,8 +15,10 @@
 #include <stdint.h>
 #include "string.h"
 #include "Main.h"
+#include "Interface/Console_V71Interface.h"
 #include "SC16IS7XXconfigs.h"
 #include "SC16IS7XX.h"
+#include "StringTools.h"
 //-----------------------------------------------------------------------------
 
 #define DEVICE_COUNT  3
@@ -301,7 +303,7 @@ static void ProcessCommand(void)
   CommandInput.Buffer[0] = '\0';                   // Break the current command in the buffer
 
   for (size_t z = 1; z < 7; z++) // Put string in lower case
-  CommandInput.Buffer[z] = LowerCase(CommandInput.Buffer[z]);
+  CommandInput.Buffer[z] = CONSOLE_LOWERCASE(CommandInput.Buffer[z]);
 
   char* pBuf = &CommandInput.Buffer[1];
 

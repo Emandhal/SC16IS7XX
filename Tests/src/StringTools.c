@@ -1,15 +1,16 @@
-/*******************************************************************************
-    File name:    StringTools.c
-    Author:       FMA
-    Version:      1.0
-    Date (d/m/y): 15/02/2021
-    Description:  Tool to convert data to string and string to data in fixed
-                  buffers
+/*!*****************************************************************************
+ * @file    StringTools.c
+ * @author  Fabien 'Emandhal' MAILLY
+ * @version 1.0.0
+ * @date    15/02/2021
+ * @brief   Tool to convert data to string and string to data in fixed buffers
+ ******************************************************************************/
 
     History :
 *******************************************************************************/
 
 //-----------------------------------------------------------------------------
+#include <ctype.h>
 #include "StringTools.h"
 //-----------------------------------------------------------------------------
 /// @cond 0
@@ -18,7 +19,7 @@
 #include <cstdint>
 extern "C" {
 #endif
-/**INDENT-ON**/
+//-----------------------------------------------------------------------------
 /// @endcond
 //-----------------------------------------------------------------------------
 
@@ -200,7 +201,6 @@ char* HexString_ToUint32ByRef(const char* srcString, uint32_t* result)
     }
     pChar++;
   }
-
   return pChar;                             // Return the new position
 }
 
@@ -391,11 +391,7 @@ size_t Float_ToString(float Val, char* buff, size_t buffSize, uint32_t IntDigits
 
 
 //-----------------------------------------------------------------------------
-/// @cond 0
-/**INDENT-OFF**/
 #ifdef __cplusplus
 }
 #endif
-/**INDENT-ON**/
-/// @endcond
 //-----------------------------------------------------------------------------

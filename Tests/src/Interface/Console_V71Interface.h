@@ -1,128 +1,169 @@
-/*******************************************************************************
-    File name:    Console_V71InterfaceSync.h
-    Author:       FMA
-    Version:      1.0
-    Date (d/m/y): 28/04/2020
-    Description:  Console interface for the Console Transmit
-                  This unit interface the Console API with the current hardware
-                  This interface implements the synchronous use of the API on a SAMV71
-                  and is also specific with the SAMV71 Xplained Ultra board
-    History :
+/*!*****************************************************************************
+ * @file    Console_V71InterfaceSync.h
+ * @author  Fabien 'Emandhal' MAILLY
+ * @version 1.1.0
+ * @date    04/06/2023
+ * @brief   Console interface for the Console Transmit and Receive
+ *          This unit interface the Console API with the current hardware
+ *          This interface implements the synchronous use of the API on a SAMV71
+ *          and is also specific with the SAMV71 Xplained Ultra board
 *******************************************************************************/
+/* @page License
+ *
+ * Copyright (c) 2020-2023 Fabien MAILLY
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS,
+ * IMPLIED OR STATUTORY, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO
+ * EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES
+ * OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ *****************************************************************************/
+
+/* Revision history:
+ * 1.1.0    Adapt the interface to new console library
+ * 1.0.0    Release version
+ *****************************************************************************/
 #ifndef CONSOLE_V71INTERFACESYNC_H_INC
 #define CONSOLE_V71INTERFACESYNC_H_INC
 //=============================================================================
 
 //-----------------------------------------------------------------------------
 #include <stdlib.h>
+#include "Console.h"
 //-----------------------------------------------------------------------------
-/// @cond 0
-/**INDENT-OFF**/
 #ifdef __cplusplus
-extern "C" {
+  extern "C" {
 #endif
-/**INDENT-ON**/
-/// @endcond
 //-----------------------------------------------------------------------------
 
-
+#ifdef USE_CONSOLE_TX
 
 //! Log Title, use it instead of LOG!
-#define LOGTITLE(format, ...)           LOG(CONSOLE_TX, lsTitle, format, ##__VA_ARGS__)
+#  define LOGTITLE(format, ...)           LOG(CONSOLE_TX, lsTitle, format, ##__VA_ARGS__)
 //! Log Fatal, use it instead of LOG!
-#define LOGFATAL(format, ...)           LOG(CONSOLE_TX, lsFatal, format, ##__VA_ARGS__)
+#  define LOGFATAL(format, ...)           LOG(CONSOLE_TX, lsFatal, format, ##__VA_ARGS__)
 //! Log Error, use it instead of LOG!
-#define LOGERROR(format, ...)           LOG(CONSOLE_TX, lsError, format, ##__VA_ARGS__)
+#  define LOGERROR(format, ...)           LOG(CONSOLE_TX, lsError, format, ##__VA_ARGS__)
 //! Log Warning, use it instead of LOG!
-#define LOGWARN(format, ...)            LOG(CONSOLE_TX, lsWarning, format, ##__VA_ARGS__)
+#  define LOGWARN(format, ...)            LOG(CONSOLE_TX, lsWarning, format, ##__VA_ARGS__)
 //! Log Information, use it instead of LOG!
-#define LOGINFO(format, ...)            LOG(CONSOLE_TX, lsInfo, format, ##__VA_ARGS__)
+#  define LOGINFO(format, ...)            LOG(CONSOLE_TX, lsInfo, format, ##__VA_ARGS__)
 //! Log Trace, use it instead of LOG!
-#define LOGTRACE(format, ...)           LOG(CONSOLE_TX, lsTrace, format, ##__VA_ARGS__)
+#  define LOGTRACE(format, ...)           LOG(CONSOLE_TX, lsTrace, format, ##__VA_ARGS__)
 //! Log Debug, use it instead of LOG!
-#	define LOGDEBUG(format, ...)          LOG(CONSOLE_TX, lsDebug, format, ##__VA_ARGS__)
+#  define LOGDEBUG(format, ...)           LOG(CONSOLE_TX, lsDebug, format, ##__VA_ARGS__)
 //! Log Special, use it instead of LOG!
-#	define LOGSPECIAL(format, ...)        LOG(CONSOLE_TX, lsSpecial, format, ##__VA_ARGS__)
-//! Log Special, use it instead of LOG!
-#	define LOGSPECIAL(format, ...)        LOG(CONSOLE_TX, lsSpecial, format, ##__VA_ARGS__)
+#  define LOGSPECIAL(format, ...)         LOG(CONSOLE_TX, lsSpecial, format, ##__VA_ARGS__)
 //! Hexadecimal dump of memory
-#define HEXDUMP(context, src, size)     __HexDump(CONSOLE_TX, context, src, size)
+#  define HEXDUMP(context, src, size)     __HexDump(CONSOLE_TX, context, src, size)
 //! Binary dump of memory
-#define BINDUMP(context, src, size)     __BinDump(CONSOLE_TX, context, src, size, false)
-//! Reverse binary dump of memory
-#define REVBINDUMP(context, src, size)  __BinDump(CONSOLE_TX, context, src, size, true)
+#  define BINDUMP(context, src, size)     __BinDump(CONSOLE_TX, context, src, size)
+
+#else
+
+//! Log Title, use it instead of LOG!
+#  define LOGTITLE(format, ...)
+//! Log Fatal, use it instead of LOG!
+#  define LOGFATAL(format, ...)
+//! Log Error, use it instead of LOG!
+#  define LOGERROR(format, ...)
+//! Log Warning, use it instead of LOG!
+#  define LOGWARN(format, ...)
+//! Log Information, use it instead of LOG!
+#  define LOGINFO(format, ...)
+//! Log Trace, use it instead of LOG!
+#  define LOGTRACE(format, ...)
+//! Log Debug, use it instead of LOG!
+#  define LOGDEBUG(format, ...)
+//! Log Special, use it instead of LOG!
+#  define LOGSPECIAL(format, ...)
+//! Hexadecimal dump of memory
+#  define HEXDUMP(context, src, size)
+//! Binary dump of memory
+#  define BINDUMP(context, src, size)
+
+#endif
+//-----------------------------------------------------------------------------
 
 
 
 
 
 //**********************************************************************************************************************************************************
+//********************************************************************************************************************
+// UART of V71
+//********************************************************************************************************************
+
+//! @brief Console UART Tx initialization for the ATSAMV71
+void ConsoleUART_TxInit_V71(void);
+
+/*! @brief UART transmit char function interface of the ATSAMV71
+ *
+ * This function will be called to try to transmit data over the UART
+ * This function only try to transmit and it is not intend to transmit all the data. To transmit all the data, repeat calling this function until size == 0
+ * @param[in] *pIntDev Is the UART interface container structure used for the UART transmit
+ * @param[in] *data Is the data array to send to the UART transmiter through the transmit FIFO
+ * @param[in] size Is the count of data to send to the UART transmitter through the transmit FIFO
+ * @param[out] *actuallySent Is the count of data actually sent to the transmit FIFO
+ * @return Returns an #eERRORRESULT value enum
+ */
+eERRORRESULT UARTtransmit_V71(UART_Interface *pIntDev, uint8_t *data, size_t size, size_t *actuallySent);
+
+//-----------------------------------------------------------------------------
 
 
+//! @brief Console UART Rx initialization for the ATSAMV71
+void ConsoleUART_RxInit_V71(void);
 
-
-
-//! Define the console transmission buffer size, must be determined according to the max length of a string and the UART speed
-#define CONSOLE_TX_BUFFER_SIZE  1024
-
-//! The actual console transmission buffer
-char ConsoleTxBuffer[CONSOLE_TX_BUFFER_SIZE];
-
-//! The console transmission configuration
-extern ConsoleTx Console_Tx_Conf;
-
-//! Define to simplify the naming at the functions calling
-#define CONSOLE_TX  &Console_Tx_Conf
-
-
+/*! @brief UART receive char function interface of the ATSAMV71
+ *
+ * @param[in] *pIntDev Is the UART interface container structure used for the UART receive
+ * @param[out] *data Is where the data will be stored
+ * @param[in] size Is the count of data that the data buffer can hold
+ * @param[out] *actuallyReceived Is the count of data actually received from the received FIFO
+ * @param[out] *lastCharError Is the last char received error. Set to UART_NO_ERROR (0) if no errors
+ * @return Returns an #eERRORRESULT value enum
+ */
+eERRORRESULT UARTreceive_V71(UART_Interface *pIntDev, uint8_t *data, size_t size, size_t *actuallyReceived, uint8_t *lastCharError);
 
 //-----------------------------------------------------------------------------
 
 
 
-/*! @brief Console Tx interface configuration for the ATSAMV71
- *
- * This function will be called at API initialization to configure the interface driver (UART)
- * @param[in] *pApi Is the pointed structure of the API that call this function
- */
-void ConsoleTx_InterfaceInit_V71(ConsoleTx *pApi);
 
 
+//**********************************************************************************************************************************************************
+//********************************************************************************************************************
+// Console Transmit API
+//********************************************************************************************************************
+#ifdef USE_CONSOLE_TX
 
-/*! @brief Console send char to UART for the ATSAMV71
- *
- * This function will be called when a character have to be send through interface
- * @param[in] *pApi Is the pointed structure of the API that call this function
- * @param[in] charToSend Is the char to send through the interface
- * @return If the char have been send or not
- */
-bool ConsoleTx_SendChar_V71(ConsoleTx *pApi, char charToSend);
+#  define CONSOLE_TX_BUFFER_SIZE    200          //!< Define the console transmission buffer size, must be determined according to the max length of a string and the UART speed
+   char ConsoleTxBuffer[CONSOLE_TX_BUFFER_SIZE]; //!< The actual console transmission buffer
+
+   extern ConsoleTx Console_TxConf;   //!< The console transmission configuration
+#  define CONSOLE_TX  &Console_TxConf //!< Define to simplify the naming at the functions calling
+
+#endif // USE_CONSOLE_TX
+//-----------------------------------------------------------------------------
 
 
 
 
 
 //**********************************************************************************************************************************************************
-
-
-
-
-
-//! Define the console reception buffer size, must be determined according to the max length of a string that will be received
-#define CONSOLE_RX_BUFFER_SIZE  10
-
-//! The actual console reception buffer
-char ConsoleRxBuffer[CONSOLE_RX_BUFFER_SIZE];
-
-//! The console reception configuration
-extern ConsoleRx Console_Rx_Conf;
-
-//! Define to simplify the naming at the functions calling
-#define CONSOLE_RX  &Console_Rx_Conf
-
-
-
-
 
 //! Command buffer size
 #define COMMAND_BUFFER_SIZE   256
@@ -141,41 +182,23 @@ typedef struct
 //! The current Command Input buffer
 extern CommandInputBuf CommandInput;
 
+//********************************************************************************************************************
+// Console Receive API
+//********************************************************************************************************************
+#ifdef USE_CONSOLE_RX
 
+#  ifdef CONSOLE_RX_USE_COMMAND_RECALL
+#    define CONSOLE_RX_COMMAND_BUFFER_SIZE    400               //!< Define the console command recall buffer size, this set the character count of commands that can be recall
+   char ConsoleRxCommandBuffer[CONSOLE_RX_COMMAND_BUFFER_SIZE]; //!< The actual console command recall buffer
+#  endif
 
+   extern ConsoleRx Console_RxConf;   //!< The console reception configuration
+#  define CONSOLE_RX  &Console_RxConf //!< Define to simplify the naming at the functions calling
+
+#endif // USE_CONSOLE_RX
 //-----------------------------------------------------------------------------
-
-
-
-/*! @brief Console Rx interface configuration for the ATSAMV71
- *
- * This function will be called at API initialization to configure the interface driver (UART)
- * @param[in] *pApi Is the pointed structure of the API that call this function
- */
-void ConsoleRx_InterfaceInit_V71(ConsoleRx *pApi);
-
-
-
-/*! @brief Console get char from UART of the ATSAMV71
- *
- * This function will be called when a character have to be get from the interface
- * @param[in] *pApi Is the pointed structure of the API that call this function
- * @param[out] *charToSend Is the char received from the interface
- * @return If the char have been send or not
- */
-bool ConsoleRx_GetChar_V71(ConsoleRx *pApi, char *charReceived);
-
-
-
-
-
-//-----------------------------------------------------------------------------
-/// @cond 0
-/**INDENT-OFF**/
 #ifdef __cplusplus
 }
 #endif
-/**INDENT-ON**/
-/// @endcond
 //-----------------------------------------------------------------------------
 #endif /* CONSOLE_V71INTERFACESYNC_H_INC */

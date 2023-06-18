@@ -1,14 +1,12 @@
-/*******************************************************************************
-    File name:    SPI_V71.c
-    Author:       FMA
-    Version:      1.0
-    Date (d/m/y): 18/04/2021
-    Description:  SPI driver for Atmel MCUs
-                  This interface implements a synchronous use of the SPI and
-                  an asynchronous use of SPI by using a DMA
-
-    History :
-*******************************************************************************/
+/*!*****************************************************************************
+ * @file    SPI_V71.c
+ * @author  Fabien 'Emandhal' MAILLY
+ * @version 1.0.0
+ * @date    18/04/2021
+ * @brief   SPI driver for Atmel MCUs
+ * @details This interface implements a synchronous use of the SPI and
+ *          an asynchronous use of SPI by using a DMA
+ ******************************************************************************/
 
 //-----------------------------------------------------------------------------
 #include "SPI_V71.h"
@@ -57,6 +55,12 @@ COMPILER_WORD_ALIGNED static XDMAC_ChannelConfig __XDMAC_SPIconfig; // XDMAC SPI
 
 //-----------------------------------------------------------------------------
 
+#define ns_TO_DLYBCS(clk, ns)  ( (((ns)     ) * ((clk) / 1000000)) / 1000 ) //!< Convert ns to SPI DLYBCS
+#define ns_TO_DLYBS(clk, ns)   ( (((ns)     ) * ((clk) / 1000000)) / 1000 ) //!< Convert ns to SPI DLYBS
+#define ns_TO_DLYBCT(clk, ns)  ( (((ns) / 32) * ((clk) / 1000000)) / 1000 ) //!< Convert ns to SPI DLYBCT
+
+//-----------------------------------------------------------------------------
+
 
 #define SPI_IRQ_level 0
 
@@ -69,7 +73,7 @@ eERRORRESULT SPI_Init(Spi* pSPI, const SPI_Config* pConf)
 #ifdef CHECK_NULL_PARAM
   if ((pSPI == NULL) || (pConf == NULL)) return ERR__PARAMETER_ERROR;
 #endif
-  uint32_t Value = 0;
+  uint32_t ConvVal, Value = 0;
 
   //--- Enable peripheral clock ---
   uint32_t PeriphID = SPI_GetPeripheralID(pSPI);
@@ -88,18 +92,32 @@ eERRORRESULT SPI_Init(Spi* pSPI, const SPI_Config* pConf)
   Value |= (pConf->CSdecoder       ? SPI_MR_PCSDEC  : 0);
   Value |= (pConf->ModeFaultDetect ? 0 : SPI_MR_MODFDIS);
   Value |= (pConf->WaitRead        ? SPI_MR_WDRBT   : 0);
-  Value |= SPI_MR_DLYBCS(pConf->DLYBCS);
-  pSPI->SPI_MR = Value; // Set MR register value
+  //--- Set Delay Between Chip Selects --
+  ConvVal = ns_TO_DLYBCS(sysclk_get_peripheral_hz(), pConf->DLYBCS_ns);
+  if (ConvVal < SPI_DLYBCS_MIN) ConvVal = SPI_DLYBCS_MIN;
+  if (ConvVal > SPI_DLYBCS_MAX) ConvVal = SPI_DLYBCS_MAX;
+  Value |= SPI_MR_DLYBCS(ConvVal);
+  //--- Set value to register ---
+  pSPI->SPI_MR = Value; //** Set MR register value
 
   //--- Configure Chip Select ---
   for (size_t z = 0; z < 4; ++z)
   {
-    Value = (uint32_t)pConf->CSR[z].CSB;
-    if ((pConf->CSR[z].BITS < SPI_BITS_MIN) || (pConf->CSR[z].BITS > SPI_BITS_MAX)) return ERR__SPI_CONFIG_ERROR;
-    Value |= SPI_CSR_BITS(pConf->CSR[z].BITS - 8);
-    Value |= SPI_CSR_DLYBS(pConf->CSR[z].DLYBS);
-    Value |= SPI_CSR_DLYBCT(pConf->CSR[z].DLYBCT);
-    pSPI->SPI_CSR[z] = Value; // Set CRSx register value
+    Value = (uint32_t)pConf->CSR[z].CSbehavior;
+    if ((pConf->CSR[z].BitsPerTransfer < SPI_BITS_MIN) || (pConf->CSR[z].BitsPerTransfer > SPI_BITS_MAX)) return ERR__SPI_CONFIG_ERROR;
+    Value |= SPI_CSR_BITS(pConf->CSR[z].BitsPerTransfer - 8);
+    //--- Set Delay Before SPCK ---
+    ConvVal = ns_TO_DLYBS(sysclk_get_peripheral_hz(), pConf->CSR[z].DLYBS_ns);
+    if (ConvVal < SPI_DLYBS_MIN) ConvVal = SPI_DLYBS_MIN;
+    if (ConvVal > SPI_DLYBS_MAX) ConvVal = SPI_DLYBS_MAX;
+    Value |= SPI_CSR_DLYBS(ConvVal);
+    //--- Set Delay Between Consecutive Transfers ---
+    ConvVal = ns_TO_DLYBCT(sysclk_get_peripheral_hz(), pConf->CSR[z].DLYBCT_ns);
+    if (ConvVal < SPI_DLYBCT_MIN) ConvVal = SPI_DLYBCT_MIN;
+    if (ConvVal > SPI_DLYBCT_MAX) ConvVal = SPI_DLYBCT_MAX;
+    Value |= SPI_CSR_DLYBCT(ConvVal);
+    //--- Set value to register ---
+    pSPI->SPI_CSR[z] = Value; //** Set CRSx register value
   }
   return ERR_OK;
 }
@@ -248,7 +266,7 @@ uint32_t SPI_GetPeripheralNumber(Spi* pSPI)
   }
 #elif SAM4L
   if (pSPI == SPI) {
-    return 1;
+    return 0;
   }
 #endif
   return SPI_INVALID_PERIPHERAL;
@@ -329,7 +347,7 @@ void SPI_Reset(Spi* pSPI)
 eERRORRESULT SPI_SetSPIclockHz(Spi* pSPI, uint8_t chipSelect, uint32_t desiredClockHz)
 {
   //--- Check parameters ---
-  if (desiredClockHz > SPI_SPICLOCK_MAN) return ERR__SPI_FREQUENCY_ERROR; // SPI SCL frequency in master mode is 400kHz
+  if (desiredClockHz > SPI_SPICLOCK_MAX) return ERR__SPI_FREQUENCY_ERROR; // SPI SCL frequency in master mode is 400kHz
   uint32_t PeripheralClock = sysclk_get_peripheral_hz();
 
   //--- Calculate Clock divider ---
@@ -578,67 +596,38 @@ static eERRORRESULT __SPI_DMA_Transfer(Spi *pSPI, SPIInterface_Packet* const pPa
   pPacketDesc->Config.Value |= SPI_TRANSACTION_NUMBER_SET(__SPItransferList[PeriphNumber].TransactionCounter); // Set the transaction number for the driver
 
   //--- Configure the XDMAC ---
-//  const eSPI_EndianTransform EndianTransform = SPI_ENDIAN_TRANSFORM_GET(pPacketDesc->Config.Value);
-  //--- Prepare DMA channel ---
   if (pPacketDesc->TxData != NULL)
   {
     //--- Configure the DMA for a write ---
-/*    switch (EndianTransform)
-    {
-      default:
-      case SPI_NO_ENDIAN_CHANGE:*/
-          __XDMAC_SPIconfig.MBR_SA  = (uint32_t)pPacketDesc->TxData; // Source Address Member
-          __XDMAC_SPIconfig.MBR_DA  = (uint32_t)pSPI->SPI_TDR;       // Destination Address Member
-          __XDMAC_SPIconfig.MBR_BC  = 0;                             // Block Control Member. Microblock count is 1 per blocks
-          __XDMAC_SPIconfig.MBR_UBC = (pPacketDesc->DataSize - 1);   // Microblock Control Member (size). SPI write with DMA needs the last byte to be processed manually
-          __XDMAC_SPIconfig.MBR_CFG = XDMAC_CC_TYPE_PER_TRAN         // Synchronized mode (Peripheral to Memory or Memory to Peripheral Transfer)
-                                    | XDMAC_CC_MBSIZE_SINGLE         // The memory burst size is set to one
-                                    | XDMAC_CC_DSYNC_MEM2PER         // Memory transfer to Peripheral
-//                                    | XDMAC_CC_SWREQ_HWR_CONNECTED   // Hardware request line is connected to the peripheral request line
-                                    | XDMAC_CC_MEMSET_NORMAL_MODE    // Memset is not activated
-                                    | XDMAC_CC_CSIZE_CHK_1           // Chunk Size 1 data transferred
-                                    | XDMAC_CC_DWIDTH_BYTE           // The data size is set to 8 bits
-                                    | XDMAC_CC_SIF_AHB_IF0           // The data is read through the system bus interface 0
-                                    | XDMAC_CC_DIF_AHB_IF1           // The data is written through the system bus interface 1
-                                    | XDMAC_CC_SAM_INCREMENTED_AM    // The Source Addressing mode is incremented (the increment size is set to the data size)
-                                    | XDMAC_CC_DAM_FIXED_AM          // The Destination Address remains unchanged
-                                    | XDMAC_CC_PERID(XDMAC_SPI_PERID_Base + 0 + (PeriphNumber * 2)); // Channel x Peripheral Identifier
-          __XDMAC_SPIconfig.MBR_DS  = 0;                             // Data Stride Member
-          __XDMAC_SPIconfig.MBR_SUS = 0;                             // Source Microblock Stride Member.
-          __XDMAC_SPIconfig.MBR_DUS = 0;                             // Destination Microblock Stride Member
-/*          break;
-      case SPI_SWITCH_ENDIAN_16BITS:
-          __XDMAC_SPIconfig.MBR_SA  = (uint32_t)(pPacketDesc->TxData + 1); // Source Address Member + 1
-          __XDMAC_SPIconfig.MBR_DA  = (uint32_t)pSPI->SPI_TDR;             // Destination Address Member
-          __XDMAC_SPIconfig.MBR_BC  = (pPacketDesc->DataSize - 1) / 2;     // Block Control Member. SPI write with DMA needs the last byte to be processed manually. Divide per 2 because there will be 2-bytes per microblock
-          __XDMAC_SPIconfig.MBR_UBC = 2;                                   // Microblock Control Member (size). 2 bytes per microblock for 16-bits data
-          __XDMAC_SPIconfig.MBR_CFG = XDMAC_CC_TYPE_PER_TRAN               // Synchronized mode (Peripheral to Memory or Memory to Peripheral Transfer)
-                                    | XDMAC_CC_MBSIZE_SINGLE               // The memory burst size is set to one
-                                    | XDMAC_CC_DSYNC_MEM2PER               // Memory transfer to Peripheral
-//                                    | XDMAC_CC_SWREQ_HWR_CONNECTED         // Hardware request line is connected to the peripheral request line
-                                    | XDMAC_CC_MEMSET_NORMAL_MODE          // Memset is not activated
-                                    | XDMAC_CC_CSIZE_CHK_1                 // Chunk Size 1 data transferred
-                                    | XDMAC_CC_DWIDTH_BYTE                 // The data size is set to 8 bits
-                                    | XDMAC_CC_SIF_AHB_IF0                 // The data is read through the system bus interface 0
-                                    | XDMAC_CC_DIF_AHB_IF1                 // The data is written through the system bus interface 1
-                                    | XDMAC_CC_SAM_UBS_DS_AM               // The microblock stride is added at the microblock boundary, the data stride is added at the data boundary
-                                    | XDMAC_CC_DAM_FIXED_AM                // The Destination Address remains unchanged
-                                    | XDMAC_CC_PERID(XDMAC_SPI_PERID_Base + 0 + (PeriphNumber * 2)); // Channel x Peripheral Identifier
-          __XDMAC_SPIconfig.MBR_DS  = XDMAC_CDS_MSP_DDS_MSP((uint16_t)-2); // Data Stride Member. Save 2-bytes data backward to perform the endian swap
-          __XDMAC_SPIconfig.MBR_SUS = 2;                                   // Source Microblock Stride Member.
-          __XDMAC_SPIconfig.MBR_DUS = 0;                                   // Destination Microblock Stride Member
-          break;
-    }*/
-    __XDMAC_SPIconfig.MBR_NDA = 0;                 // Next Descriptor Address
-    __XDMAC_SPIconfig.MBR_NDC = 0;                 // Next Descriptor Control
-    __XDMAC_SPIconfig.NDAIF   = 0;                 // Next Descriptor Interface
+    __XDMAC_SPIconfig.MBR_SA  = (uint32_t)pPacketDesc->TxData; // Source Address Member
+    __XDMAC_SPIconfig.MBR_DA  = (uint32_t)pSPI->SPI_TDR;       // Destination Address Member
+    __XDMAC_SPIconfig.MBR_BC  = 0;                             // Block Control Member. Microblock count is 1 per blocks
+    __XDMAC_SPIconfig.MBR_UBC = pPacketDesc->DataSize;         // Microblock Control Member (size)
+    __XDMAC_SPIconfig.MBR_CFG = XDMAC_CC_TYPE_PER_TRAN         // Synchronized mode (Peripheral to Memory or Memory to Peripheral Transfer)
+                              | XDMAC_CC_MBSIZE_SINGLE         // The memory burst size is set to one
+                              | XDMAC_CC_DSYNC_MEM2PER         // Memory transfer to Peripheral
+//                              | XDMAC_CC_SWREQ_HWR_CONNECTED   // Hardware request line is connected to the peripheral request line
+                              | XDMAC_CC_MEMSET_NORMAL_MODE    // Memset is not activated
+                              | XDMAC_CC_CSIZE_CHK_1           // Chunk Size 1 data transferred
+                              | XDMAC_CC_DWIDTH_BYTE           // The data size is set to 8 bits
+                              | XDMAC_CC_SIF_AHB_IF0           // The data is read through the system bus interface 0
+                              | XDMAC_CC_DIF_AHB_IF1           // The data is written through the system bus interface 1
+                              | XDMAC_CC_SAM_INCREMENTED_AM    // The Source Addressing mode is incremented (the increment size is set to the data size)
+                              | XDMAC_CC_DAM_FIXED_AM          // The Destination Address remains unchanged
+                              | XDMAC_CC_PERID(XDMAC_SPI_PERID_Base + 0 + (PeriphNumber * 2)); // Channel x Peripheral Identifier
+    __XDMAC_SPIconfig.MBR_DS  = 0;                             // Data Stride Member
+    __XDMAC_SPIconfig.MBR_SUS = 0;                             // Source Microblock Stride Member.
+    __XDMAC_SPIconfig.MBR_DUS = 0;                             // Destination Microblock Stride Member
+    __XDMAC_SPIconfig.MBR_NDA = 0;                             // Next Descriptor Address
+    __XDMAC_SPIconfig.MBR_NDC = 0;                             // Next Descriptor Control
+    __XDMAC_SPIconfig.NDAIF   = 0;                             // Next Descriptor Interface
     //--- Set XDMA interrupts ---
-    __XDMAC_SPIconfig.Interrupts = XDMAC_CIE_BIE   // End of Block Interrupt Enable Bit
-                                 | XDMAC_CIE_DIE   // End of Disable Interrupt Enable Bit
-                                 | XDMAC_CIE_FIE   // End of Flush Interrupt Enable Bit
-                                 | XDMAC_CIE_RBIE  // Read Bus Error Interrupt Enable Bit
-                                 | XDMAC_CIE_WBIE  // Write Bus Error Interrupt Enable Bit
-                                 | XDMAC_CIE_ROIE; // Request Overflow Error Interrupt Enable Bit
+    __XDMAC_SPIconfig.Interrupts = XDMAC_CIE_BIE               // End of Block Interrupt Enable Bit
+                                 | XDMAC_CIE_DIE               // End of Disable Interrupt Enable Bit
+                                 | XDMAC_CIE_FIE               // End of Flush Interrupt Enable Bit
+                                 | XDMAC_CIE_RBIE              // Read Bus Error Interrupt Enable Bit
+                                 | XDMAC_CIE_WBIE              // Write Bus Error Interrupt Enable Bit
+                                 | XDMAC_CIE_ROIE;             // Request Overflow Error Interrupt Enable Bit
     //--- Configure and enable DMA channel ---
     Error = XDMAC_ConfigureTransfer(__HasReservedDMAchannel[PeriphNumber].Tx, &__XDMAC_SPIconfig);
     if (Error != ERR_OK) return Error;
@@ -651,62 +640,35 @@ static eERRORRESULT __SPI_DMA_Transfer(Spi *pSPI, SPIInterface_Packet* const pPa
   if (pPacketDesc->RxData != NULL)
   {
     //--- Configure the DMA for a read ---
-/*    switch (EndianTransform)
-    {
-      default:
-      case SPI_NO_ENDIAN_CHANGE:*/
-          __XDMAC_SPIconfig.MBR_SA  = (uint32_t)pSPI->SPI_RDR;       // Source Address Member
-          __XDMAC_SPIconfig.MBR_DA  = (uint32_t)pPacketDesc->RxData; // Destination Address Member
-          __XDMAC_SPIconfig.MBR_BC  = 0;                             // Block Control Member. Microblock count is 1 per blocks
-          __XDMAC_SPIconfig.MBR_UBC = (pPacketDesc->DataSize - 2);   // Microblock Control Member (size). SPI read with DMA needs the last 2-bytes to be processed manually
-          __XDMAC_SPIconfig.MBR_CFG = XDMAC_CC_TYPE_PER_TRAN         // Synchronized mode (Peripheral to Memory or Memory to Peripheral Transfer)
-                                    | XDMAC_CC_MBSIZE_SINGLE         // The memory burst size is set to one
-                                    | XDMAC_CC_DSYNC_PER2MEM         // Peripheral to Memory transfer
-//                                      | XDMAC_CC_SWREQ_HWR_CONNECTED   // Hardware request line is connected to the peripheral request line
-                                    | XDMAC_CC_MEMSET_NORMAL_MODE    // Memset is not activated
-                                    | XDMAC_CC_CSIZE_CHK_1           // Chunk Size 1 data transferred
-                                    | XDMAC_CC_DWIDTH_BYTE           // The data size is set to 8 bits
-                                    | XDMAC_CC_SIF_AHB_IF1           // The data is read through the system bus interface 1
-                                    | XDMAC_CC_DIF_AHB_IF0           // The data is written through the system bus interface 0
-                                    | XDMAC_CC_SAM_FIXED_AM          // The Source Address remains unchanged
-                                    | XDMAC_CC_DAM_INCREMENTED_AM    // The Destination Addressing mode is incremented (the increment size is set to the data size)
-                                    | XDMAC_CC_PERID(XDMAC_SPI_PERID_Base + 1 + (PeriphNumber * 2)); // Channel x Peripheral Identifier
-          __XDMAC_SPIconfig.MBR_DS  = 0;                             // Data Stride Member
-          __XDMAC_SPIconfig.MBR_SUS = 0;                             // Source Microblock Stride Member.
-          __XDMAC_SPIconfig.MBR_DUS = 0;                             // Destination Microblock Stride Member
-/*          break;
-      case SPI_SWITCH_ENDIAN_16BITS:
-          __XDMAC_SPIconfig.MBR_SA  = (uint32_t)pSPI->SPI_RDR;             // Source Address Member
-          __XDMAC_SPIconfig.MBR_DA  = (uint32_t)(pPacketDesc->RxData + 1); // Destination Address Member + 1
-          __XDMAC_SPIconfig.MBR_BC  = (pPacketDesc->DataSize - 2) / 2;     // Block Control Member. SPI read with DMA needs the last 2-bytes to be processed manually. Divide per 2 because there will be 2-bytes per microblock
-          __XDMAC_SPIconfig.MBR_UBC = 2;                                   // Microblock Control Member (size). 2 bytes per microblock for 16-bits data
-          __XDMAC_SPIconfig.MBR_CFG = XDMAC_CC_TYPE_PER_TRAN               // Synchronized mode (Peripheral to Memory or Memory to Peripheral Transfer)
-                                    | XDMAC_CC_MBSIZE_SINGLE               // The memory burst size is set to one
-                                    | XDMAC_CC_DSYNC_MEM2PER               // Memory transfer to Peripheral
-//                                    | XDMAC_CC_SWREQ_HWR_CONNECTED         // Hardware request line is connected to the peripheral request line
-                                    | XDMAC_CC_MEMSET_NORMAL_MODE          // Memset is not activated
-                                    | XDMAC_CC_CSIZE_CHK_1                 // Chunk Size 1 data transferred
-                                    | XDMAC_CC_DWIDTH_BYTE                 // The data size is set to 8 bits
-                                    | XDMAC_CC_SIF_AHB_IF0                 // The data is read through the system bus interface 0
-                                    | XDMAC_CC_DIF_AHB_IF1                 // The data is written through the system bus interface 1
-                                    | XDMAC_CC_SAM_FIXED_AM                // The Source Address remains unchanged
-                                    | XDMAC_CC_DAM_UBS_DS_AM               // The microblock stride is added at the microblock boundary, the data stride is added at the data boundary
-                                    | XDMAC_CC_PERID(XDMAC_SPI_PERID_Base + 1 + (PeriphNumber * 2)); // Channel x Peripheral Identifier
-          __XDMAC_SPIconfig.MBR_DS  = XDMAC_CDS_MSP_SDS_MSP((uint16_t)-2); // Data Stride Member. Save 2-bytes data backward to perform the endian swap
-          __XDMAC_SPIconfig.MBR_SUS = 0;                                   // Source Microblock Stride Member.
-          __XDMAC_SPIconfig.MBR_DUS = 2;                                   // Destination Microblock Stride Member
-          break;
-    }*/
-    __XDMAC_SPIconfig.MBR_NDA = 0;                 // Next Descriptor Address
-    __XDMAC_SPIconfig.MBR_NDC = 0;                 // Next Descriptor Control
-    __XDMAC_SPIconfig.NDAIF   = 0;                 // Next Descriptor Interface
+    __XDMAC_SPIconfig.MBR_SA  = (uint32_t)pSPI->SPI_RDR;       // Source Address Member
+    __XDMAC_SPIconfig.MBR_DA  = (uint32_t)pPacketDesc->RxData; // Destination Address Member
+    __XDMAC_SPIconfig.MBR_BC  = 0;                             // Block Control Member. Microblock count is 1 per blocks
+    __XDMAC_SPIconfig.MBR_UBC = pPacketDesc->DataSize;         // Microblock Control Member (size)
+    __XDMAC_SPIconfig.MBR_CFG = XDMAC_CC_TYPE_PER_TRAN         // Synchronized mode (Peripheral to Memory or Memory to Peripheral Transfer)
+                              | XDMAC_CC_MBSIZE_SINGLE         // The memory burst size is set to one
+                              | XDMAC_CC_DSYNC_PER2MEM         // Peripheral to Memory transfer
+//                                | XDMAC_CC_SWREQ_HWR_CONNECTED   // Hardware request line is connected to the peripheral request line
+                              | XDMAC_CC_MEMSET_NORMAL_MODE    // Memset is not activated
+                              | XDMAC_CC_CSIZE_CHK_1           // Chunk Size 1 data transferred
+                              | XDMAC_CC_DWIDTH_BYTE           // The data size is set to 8 bits
+                              | XDMAC_CC_SIF_AHB_IF1           // The data is read through the system bus interface 1
+                              | XDMAC_CC_DIF_AHB_IF0           // The data is written through the system bus interface 0
+                              | XDMAC_CC_SAM_FIXED_AM          // The Source Address remains unchanged
+                              | XDMAC_CC_DAM_INCREMENTED_AM    // The Destination Addressing mode is incremented (the increment size is set to the data size)
+                              | XDMAC_CC_PERID(XDMAC_SPI_PERID_Base + 1 + (PeriphNumber * 2)); // Channel x Peripheral Identifier
+    __XDMAC_SPIconfig.MBR_DS  = 0;                             // Data Stride Member
+    __XDMAC_SPIconfig.MBR_SUS = 0;                             // Source Microblock Stride Member.
+    __XDMAC_SPIconfig.MBR_DUS = 0;                             // Destination Microblock Stride Member
+    __XDMAC_SPIconfig.MBR_NDA = 0;                             // Next Descriptor Address
+    __XDMAC_SPIconfig.MBR_NDC = 0;                             // Next Descriptor Control
+    __XDMAC_SPIconfig.NDAIF   = 0;                             // Next Descriptor Interface
     //--- Set XDMA interrupts ---
-    __XDMAC_SPIconfig.Interrupts = XDMAC_CIE_BIE   // End of Block Interrupt Enable Bit
-                                 | XDMAC_CIE_DIE   // End of Disable Interrupt Enable Bit
-                                 | XDMAC_CIE_FIE   // End of Flush Interrupt Enable Bit
-                                 | XDMAC_CIE_RBIE  // Read Bus Error Interrupt Enable Bit
-                                 | XDMAC_CIE_WBIE  // Write Bus Error Interrupt Enable Bit
-                                 | XDMAC_CIE_ROIE; // Request Overflow Error Interrupt Enable Bit
+    __XDMAC_SPIconfig.Interrupts = XDMAC_CIE_BIE               // End of Block Interrupt Enable Bit
+                                 | XDMAC_CIE_DIE               // End of Disable Interrupt Enable Bit
+                                 | XDMAC_CIE_FIE               // End of Flush Interrupt Enable Bit
+                                 | XDMAC_CIE_RBIE              // Read Bus Error Interrupt Enable Bit
+                                 | XDMAC_CIE_WBIE              // Write Bus Error Interrupt Enable Bit
+                                 | XDMAC_CIE_ROIE;             // Request Overflow Error Interrupt Enable Bit
     //--- Configure and enable DMA channel ---
     Error = XDMAC_ConfigureTransfer(__HasReservedDMAchannel[PeriphNumber].Rx, &__XDMAC_SPIconfig);
     if (Error != ERR_OK) return Error;

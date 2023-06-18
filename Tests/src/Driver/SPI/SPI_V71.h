@@ -1,13 +1,38 @@
-/*******************************************************************************
-    File name:    SPI_V71.h
-    Author:       FMA
-    Version:      1.0
-    Date (d/m/y): 18/04/2021
-    Description:  SPI driver for Atmel MCUs
-                  This interface implements a synchronous use of the SPI and
-                  an asynchronous use of SPI by using a DMA
-    History :
-*******************************************************************************/
+/*!*****************************************************************************
+ * @file    SPI_V71.h
+ * @author  Fabien 'Emandhal' MAILLY
+ * @version 1.0.0
+ * @date    18/04/2021
+ * @brief   SPI driver for Atmel MCUs
+ * @details This interface implements a synchronous use of the SPI and
+ *          an asynchronous use of SPI by using a DMA
+ ******************************************************************************/
+/* @page License
+ *
+ * Copyright (c) 2020-2023 Fabien MAILLY
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS,
+ * IMPLIED OR STATUTORY, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO
+ * EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES
+ * OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ *****************************************************************************/
+
+/* Revision history:
+ * 1.0.0    Release version
+ *****************************************************************************/
 #ifndef SPI_V71_H_INC
 #define SPI_V71_H_INC
 //=============================================================================
@@ -29,28 +54,28 @@ extern "C" {
 
 
 // Limits definitions
-#define SPI_SPICLOCK_MAN  ( 51000000u ) //!< Max SPI clock frequency (maximum pad speed)
+#define SPI_SPICLOCK_MAX  ( 51000000u ) //!< Max SPI clock frequency (maximum pad speed)
 
 
 // Definitions
-#define SPI_SCBR_MIN    (   1 ) //! Min SCBS value
-#define SPI_SCBR_MAX    ( 255 ) //! Max SCBS value
-#define SPI_DLYBCS_MIN  (   6 ) //! Min DLYBCS value
-#define SPI_DLYBCS_MAX  ( 255 ) //! Max DLYBCS value
-#define SPI_DLYBCT_MIN  (   0 ) //! Min DLYBCT value
-#define SPI_DLYBCT_MAX  ( 255 ) //! Max DLYBCT value
-#define SPI_DLYBS_MIN   (   0 ) //! Min DLYBS value
-#define SPI_DLYBS_MAX   ( 255 ) //! Max DLYBS value
-#define SPI_BITS_MIN    (   8 ) //! Min data bits value
-#define SPI_BITS_MAX    (  16 ) //! Max data bits value
+#define SPI_SCBR_MIN    (   1 ) //!< Min SCBS value
+#define SPI_SCBR_MAX    ( 255 ) //!< Max SCBS value
+#define SPI_DLYBCS_MIN  (   6 ) //!< Min DLYBCS value
+#define SPI_DLYBCS_MAX  ( 255 ) //!< Max DLYBCS value
+#define SPI_DLYBCT_MIN  (   0 ) //!< Min DLYBCT value
+#define SPI_DLYBCT_MAX  ( 255 ) //!< Max DLYBCT value
+#define SPI_DLYBS_MIN   (   0 ) //!< Min DLYBS value
+#define SPI_DLYBS_MAX   ( 255 ) //!< Max DLYBS value
+#define SPI_BITS_MIN    (   8 ) //!< Min data bits value
+#define SPI_BITS_MAX    (  16 ) //!< Max data bits value
 
-#define SPI_INVALID_PERIPHERAL  ( 0xFFFFFFFF ) //! Invalid peripheral value
-#define SPI_ALL_INTERRUPTS      ( 0x0007000F ) //! Select all interrupts
-#define SPI_FAULT_STATUS        ( SPI_SR_NACK | SPI_SR_ARBLST | SPI_SR_OVRE | SPI_SR_UNRE ) //! Fault status of the SPI for the interrupt handler
+#define SPI_INVALID_PERIPHERAL  ( 0xFFFFFFFF ) //!< Invalid peripheral value
+#define SPI_ALL_INTERRUPTS      ( 0x0007000F ) //!< Select all interrupts
+#define SPI_FAULT_STATUS        ( SPI_SR_NACK | SPI_SR_ARBLST | SPI_SR_OVRE | SPI_SR_UNRE ) //!< Fault status of the SPI for the interrupt handler
 
-#define XDMAC_SPI_PERID_Base  ( 1 ) //! Base of the SPI HW Interface Number (XDMAC_CC.PERID)
+#define XDMAC_SPI_PERID_Base  ( 1 ) //!< Base of the SPI HW Interface Number (XDMAC_CC.PERID)
 
-#define SPI_TIMEOUT  ( 30000 ) //! Time-out value (number of attempts)
+#define SPI_TIMEOUT  ( 30000 ) //!< Time-out value (number of attempts)
 
 //-----------------------------------------------------------------------------
 
@@ -131,10 +156,10 @@ typedef enum SPI_CSbehavior
 //! SPI Chip Select configuration structure
 typedef struct SPI_ChipSelectConfig
 {
-  uint8_t DLYBCT;     //!< Delay Between Consecutive Transfers
-  uint8_t DLYBS;      //!< Delay Before SPCK
-  uint8_t BITS;       //!< Bits Per Transfer
-  SPI_CSbehavior CSB; //!< SPI Chip Select behavior modes while transferring
+  uint8_t DLYBCT_ns;         //!< Delay Between Consecutive Transfers in nanoseconds
+  uint8_t DLYBS_ns;          //!< Delay Before SPCK in nanoseconds
+  uint8_t BitsPerTransfer;   //!< Bits Per Transfer
+  SPI_CSbehavior CSbehavior; //!< SPI Chip Select behavior modes while transferring
 } SPI_ChipSelectConfig;
 
 //! SPI configuration structure
@@ -144,8 +169,8 @@ typedef struct SPI_Config
   bool CSdecoder;              //!< Chip Select Decode: 'false' = The chip select lines are directly connected to a peripheral device ; 'true' = The four NPCS chip select lines are connected to a 4-bit to 16-bit decoder
   bool ModeFaultDetect;        //!< Mode Fault Detection: 'false' = Mode fault detection disabled ; 'true' = Mode fault detection enabled
   bool WaitRead;               //!< Wait Data Read Before Transfer: 'false' = No Effect. In Master mode, a transfer can be initiated regardless of the SPI_RDR state ; 'true' = In Master mode, a transfer can start only if the SPI_RDR is empty, i.e., does not contain any unread data. This mode prevents overrun error in reception
-  uint8_t DLYBCS;              //!< Delay Between Chip Selects
-  SPI_ChipSelectConfig CSR[4]; //!< Chip Select configuration
+  uint16_t DLYBCS_ns;          //!< Delay Between Chip Selects in nanoseconds
+  SPI_ChipSelectConfig CSR[4]; //!< Chip Select configuration for each 4 CS. In case of use of CS decoder, CSR[0] is for decoded lines 0..3, CSR[1] for 4..7, CSR[2] for 8..11, CRS[3] for 12..14. The 15th decoded line, shall not be used
 } SPI_Config;
 
 //-----------------------------------------------------------------------------

@@ -1,14 +1,12 @@
-/*******************************************************************************
-    File name:    TWIHS_V71.c
-    Author:       FMA
-    Version:      1.0
-    Date (d/m/y): 18/04/2021
-    Description:  TWIHS driver for Atmel MCUs
-                  This interface implements a synchronous use of the I2C and
-                  an asynchronous use of I2C by using a DMA
-
-    History :
-*******************************************************************************/
+/*!*****************************************************************************
+ * @file    TWIHS_V71.c
+ * @author  Fabien 'Emandhal' MAILLY
+ * @version 1.0.0
+ * @date    18/04/2021
+ * @brief   TWIHS driver for Atmel MCUs
+ * @details This interface implements a synchronous use of the I2C and
+            an asynchronous use of I2C by using a DMA
+ ******************************************************************************/
 
 //-----------------------------------------------------------------------------
 #include "TWIHS_V71.h"
@@ -233,6 +231,9 @@ eERRORRESULT TWIHS_InterruptDisable(Twihs* pTWIHS, uint32_t sourcesInterrupts, b
 //=============================================================================
 void TWIHS_Reset(Twihs* pTWIHS)
 {
+#ifdef CHECK_NULL_PARAM
+  if (pTWIHS == NULL) return;
+#endif
   pTWIHS->TWIHS_CR = TWIHS_CR_SWRST; // Set SWRST bit to reset TWIHS peripheral
   (void)(pTWIHS->TWIHS_RHR);         // Read dummy data in receive register (RHR)
 }
@@ -244,6 +245,9 @@ void TWIHS_Reset(Twihs* pTWIHS)
 //=============================================================================
 eERRORRESULT TWIHS_BusRecovery(Twihs* pTWIHS)
 {
+#ifdef CHECK_NULL_PARAM
+  if (pTWIHS == NULL) return ERR__PARAMETER_ERROR;
+#endif
   uint32_t PeriphID = TWIHS_GetPeripheralID(pTWIHS);
   if (PeriphID == TWIHS_INVALID_PERIPHERAL) return ERR__PERIPHERAL_NOT_VALID;
 
@@ -390,7 +394,9 @@ eERRORRESULT TWIHS_SetI2CclockHz(Twihs* pTWIHS, uint32_t desiredClockHz)
 //=============================================================================
 eERRORRESULT TWIHS_Transfer(Twihs* pTWIHS, I2CInterface_Packet* const pPacketDesc)
 {
-  if (pTWIHS == NULL) return ERR__I2C_PARAMETER_ERROR;
+#ifdef CHECK_NULL_PARAM
+  if (pTWIHS == NULL) return ERR__PARAMETER_ERROR;
+#endif
   uint32_t PeriphNumber = TWIHS_GetPeripheralNumber(pTWIHS);
 
   //--- Check the state of the transfer ---
@@ -505,11 +511,17 @@ eERRORRESULT TWIHS_Transfer(Twihs* pTWIHS, I2CInterface_Packet* const pPacketDes
 
 eERRORRESULT TWIHS_Transfer_Gen(I2C_Interface *pIntDev, const uint8_t deviceAddress, uint8_t *data, size_t byteCount, bool start, bool stop)
 {
+#ifdef CHECK_NULL_PARAM
   if (pIntDev == NULL) return ERR__I2C_PARAMETER_ERROR;
+#endif
+  if (pIntDev->UniqueID != TWIHS_UNIQUE_ID) return ERR__UNKNOWN_ELEMENT;
   Twihs* pTWIHS = (Twihs*)(pIntDev->InterfaceDevice);
+#ifdef CHECK_NULL_PARAM
+  if (pTWIHS == NULL) return ERR__I2C_PARAMETER_ERROR;
+#endif
   I2CInterface_Packet PacketDesc =
   {
-    I2C_MEMBER(Config.Value) I2C_NO_POLLING | I2C_ENDIAN_TRANSFORM_SET(I2C_NO_ENDIAN_CHANGE) | I2C_TRANSFER_TYPE_SET(I2C_SIMPLE_TRANSFER),
+    I2C_MEMBER(Config.Value) I2C_BLOCKING | I2C_ENDIAN_TRANSFORM_SET(I2C_NO_ENDIAN_CHANGE) | I2C_TRANSFER_TYPE_SET(I2C_SIMPLE_TRANSFER),
     I2C_MEMBER(ChipAddr    ) deviceAddress,
     I2C_MEMBER(pBuffer     ) data,
     I2C_MEMBER(BufferSize  ) byteCount,
@@ -845,7 +857,9 @@ static eERRORRESULT __TWIHS_DMA_Transfer(Twihs *pTWIHS, I2CInterface_Packet* con
 //=============================================================================
 eERRORRESULT TWIHS_DMA_MasterInit(Twihs *pTWIHS, const uint32_t sclFreq)
 {
-  if (pTWIHS == NULL) return ERR__I2C_PARAMETER_ERROR;
+#ifdef CHECK_NULL_PARAM
+  if (pTWIHS == NULL) return ERR__PARAMETER_ERROR;
+#endif
 
   //--- Configure DMA ---
   uint32_t PeriphNumber = TWIHS_GetPeripheralNumber(pTWIHS);
@@ -864,8 +878,14 @@ eERRORRESULT TWIHS_DMA_MasterInit(Twihs *pTWIHS, const uint32_t sclFreq)
 
 eERRORRESULT TWIHS_DMA_MasterInit_Gen(I2C_Interface *pIntDev, const uint32_t sclFreq)
 {
+#ifdef CHECK_NULL_PARAM
   if (pIntDev == NULL) return ERR__I2C_PARAMETER_ERROR;
+#endif
+  if (pIntDev->UniqueID != TWIHS_UNIQUE_ID) return ERR__UNKNOWN_ELEMENT;
   Twihs* pTWIHS = (Twihs*)(pIntDev->InterfaceDevice);
+#ifdef CHECK_NULL_PARAM
+  if (pTWIHS == NULL) return ERR__I2C_PARAMETER_ERROR;
+#endif
   return TWIHS_DMA_MasterInit(pTWIHS, sclFreq);
 }
 
@@ -876,11 +896,13 @@ eERRORRESULT TWIHS_DMA_MasterInit_Gen(I2C_Interface *pIntDev, const uint32_t scl
 //=============================================================================
 eERRORRESULT TWIHS_PacketTransfer(Twihs *pTWIHS, I2CInterface_Packet* const pPacketDesc)
 {
+#ifdef CHECK_NULL_PARAM
   if (pTWIHS == NULL) return ERR__I2C_PARAMETER_ERROR;
+#endif
   uint32_t PeriphNumber = TWIHS_GetPeripheralNumber(pTWIHS);
 
-  //--- Use polling? ---
-  if ((pPacketDesc->Config.Value & I2C_USE_POLLING) == I2C_USE_POLLING)
+  //--- Use non-blocking? ---
+  if ((pPacketDesc->Config.Value & I2C_USE_NON_BLOCKING) == I2C_USE_NON_BLOCKING)
   {
     if (__HasReservedDMAchannel[PeriphNumber] == XDMAC_INVALID_HANDLE) return ERR__DMA_NOT_CONFIGURED;
     const uint8_t CurrentTransaction = I2C_TRANSACTION_NUMBER_GET(__TWIHStransferList[PeriphNumber].Config.Value);
@@ -912,13 +934,16 @@ eERRORRESULT TWIHS_PacketTransfer(Twihs *pTWIHS, I2CInterface_Packet* const pPac
 
 eERRORRESULT TWIHS_PacketTransfer_Gen(I2C_Interface *pIntDev, I2CInterface_Packet* const pPacketDesc)
 {
+#ifdef CHECK_NULL_PARAM
+  if (pIntDev == NULL) return ERR__I2C_PARAMETER_ERROR;
+#endif
+  if (pIntDev->UniqueID != TWIHS_UNIQUE_ID) return ERR__UNKNOWN_ELEMENT;
   Twihs* pTWIHS = (Twihs*)(pIntDev->InterfaceDevice);
+#ifdef CHECK_NULL_PARAM
+  if (pTWIHS == NULL) return ERR__I2C_PARAMETER_ERROR;
+#endif
   return TWIHS_PacketTransfer(pTWIHS, pPacketDesc);
 }
-
-
-
-
 
 //-----------------------------------------------------------------------------
 #ifdef __cplusplus

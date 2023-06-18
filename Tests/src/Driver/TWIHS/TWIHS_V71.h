@@ -1,13 +1,38 @@
-/*******************************************************************************
-    File name:    TWIHS_V71.h
-    Author:       FMA
-    Version:      1.0
-    Date (d/m/y): 18/04/2021
-    Description:  TWIHS driver for Atmel MCUs
-                  This interface implements a synchronous use of the I2C and
-                  an asynchronous use of I2C by using a DMA
-    History :
-*******************************************************************************/
+/*!*****************************************************************************
+ * @file    TWIHS_V71.h
+ * @author  Fabien 'Emandhal' MAILLY
+ * @version 1.0.0
+ * @date    18/04/2021
+ * @brief   TWIHS driver for Atmel MCUs
+ * @details This interface implements a synchronous use of the I2C and
+            an asynchronous use of I2C by using a DMA
+ ******************************************************************************/
+/* @page License
+ *
+ * Copyright (c) 2020-2023 Fabien MAILLY
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS,
+ * IMPLIED OR STATUTORY, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO
+ * EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES
+ * OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ *****************************************************************************/
+
+/* Revision history:
+ * 1.0.0    Release version
+ *****************************************************************************/
 #ifndef TWIHS_V71_H_INC
 #define TWIHS_V71_H_INC
 //=============================================================================
@@ -175,6 +200,11 @@ typedef struct TWIHS_TransferStruct
   I2C_Conf Config;              //!< Transfer configuration
   uint8_t TransactionCounter;   //!< The current transaction counter
 } TWIHS_TransferStruct;
+
+//-----------------------------------------------------------------------------
+
+//! This unique ID is a helper for pointer recognition when using USE_GENERICS_DEFINED for generic call of GPIO or PORT use (using GPIO_Interface.h)
+#define TWIHS_UNIQUE_ID  ( (((uint32_t)'T' << 0) ^ ((uint32_t)'W' << 4) ^ ((uint32_t)'I' << 8) ^ ((uint32_t)'H' << 12) ^ ((uint32_t)'S' << 16) ^ ((uint32_t)'V' << 20) ^ ((uint32_t)'7' << 24) ^ ((uint32_t)'1' << 28)) + __LINE__ + (sizeof(struct TWIHS_TransferStruct) << 19) )
 
 //-----------------------------------------------------------------------------
 
